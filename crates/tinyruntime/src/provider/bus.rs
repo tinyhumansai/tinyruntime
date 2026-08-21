@@ -26,6 +26,12 @@ pub struct BusProvider {
     connection: Connection,
     language: Language,
     bus_name: String,
+    /// Where that module's object is, derived from its bus name.
+    ///
+    /// Derived rather than configured, because it is not independently
+    /// choosable: `tinybus_module!` builds a module's manifest path this way, so
+    /// this is the only path the provider can be serving at.
+    object_path: String,
 }
 
 impl std::fmt::Debug for BusProvider {
@@ -44,10 +50,13 @@ impl BusProvider {
     /// Route calls for `language` to the module claiming `bus_name`.
     #[must_use]
     pub fn new(connection: Connection, language: Language, bus_name: impl Into<String>) -> Self {
+        let bus_name = bus_name.into();
+        let object_path = names::object_path_for(&bus_name);
         Self {
             connection,
             language,
-            bus_name: bus_name.into(),
+            bus_name,
+            object_path,
         }
     }
 
@@ -65,7 +74,7 @@ impl BusProvider {
             .connection
             .proxy(
                 self.bus_name.as_str(),
-                names::PROVIDER_OBJECT_PATH,
+                self.object_path.as_str(),
                 names::PROVIDER_INTERFACE,
             )
             .map_err(|error| self.unavailable(&error))?;

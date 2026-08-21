@@ -139,7 +139,7 @@ async fn a_provider_module_on_the_bus_is_listed_as_available() -> TinyBusResult<
 
     let provider = Connection::connect(bus.connect().await?).await?;
     provider
-        .serve_at(names::PROVIDER_OBJECT_PATH.try_into()?, FakeProvider)
+        .serve_at(names::providers::NODEJS_OBJECT_PATH.try_into()?, FakeProvider)
         .await?;
     provider.request_name(FAKE_BUS_NAME).await?;
 
@@ -171,7 +171,7 @@ async fn resolve_routes_to_a_provider_module() -> TinyBusResult<()> {
 
     let provider = Connection::connect(bus.connect().await?).await?;
     provider
-        .serve_at(names::PROVIDER_OBJECT_PATH.try_into()?, FakeProvider)
+        .serve_at(names::providers::NODEJS_OBJECT_PATH.try_into()?, FakeProvider)
         .await?;
     provider.request_name(FAKE_BUS_NAME).await?;
 
