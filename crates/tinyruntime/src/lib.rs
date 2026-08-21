@@ -72,6 +72,7 @@
 //! ```
 
 pub mod archive;
+mod blocking;
 pub mod config;
 pub mod download;
 pub mod error;

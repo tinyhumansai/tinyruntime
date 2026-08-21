@@ -42,7 +42,7 @@ pub async fn extract(
 ) -> Result<PathBuf> {
     let archive = archive.to_path_buf();
     let staging_dir = staging_dir.to_path_buf();
-    let language = language.clone();
+    let owned = language.clone();
 
     tracing::info!(
         archive = %archive.display(),
@@ -51,9 +51,8 @@ pub async fn extract(
         "[tinyruntime::archive] unpacking toolchain archive"
     );
 
-    let reported = language.clone();
-    let joined = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
-        fs::create_dir_all(&staging_dir).map_err(|error| install_error(&language, &error))?;
+    crate::blocking::run(language, move || -> Result<PathBuf> {
+        fs::create_dir_all(&staging_dir).map_err(|error| install_error(&owned, &error))?;
         // A format this build does not know is a provider from a newer contract,
         // which the router refuses long before here — but the payload type is
         // `#[non_exhaustive]`, so the arm has to exist and must not panic.
@@ -63,27 +62,19 @@ pub async fn extract(
             ArchiveFormat::Zip => extract::zip(&archive, &staging_dir),
             _ => {
                 return Err(Error::Install {
-                    language,
+                    language: owned,
                     reason: "the provider named an archive format this build cannot unpack"
                         .to_string(),
                 });
             }
         };
-        unpacked.map_err(|error| install_error(&language, &error))?;
+        unpacked.map_err(|error| install_error(&owned, &error))?;
         single_root(&staging_dir).map_err(|reason| Error::Install {
-            language: language.clone(),
+            language: owned.clone(),
             reason,
         })
     })
-    .await;
-
-    match joined {
-        Ok(result) => result,
-        Err(error) => Err(Error::Install {
-            language: reported,
-            reason: format!("the unpacking task did not finish: {error}"),
-        }),
-    }
+    .await
 }
 
 /// Locate the single top-level directory inside `staging_dir`.

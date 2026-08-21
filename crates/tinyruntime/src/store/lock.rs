@@ -44,8 +44,8 @@ impl InstallLock {
                 .map_err(|error| Error::Storage(error.to_string()))?;
         }
 
-        let language = language.clone();
-        let joined = tokio::task::spawn_blocking(move || -> Result<File> {
+        let owned = language.clone();
+        let handle = crate::blocking::run(language, move || -> Result<File> {
             use fs2::FileExt;
 
             let handle = OpenOptions::new()
@@ -55,22 +55,17 @@ impl InstallLock {
                 .write(true)
                 .open(&lock_path)
                 .map_err(|error| Error::Install {
-                    language: language.clone(),
+                    language: owned.clone(),
                     reason: format!("the install lock could not be opened: {error}"),
                 })?;
             handle.lock_exclusive().map_err(|error| Error::Install {
-                language: language.clone(),
+                language: owned.clone(),
                 reason: format!("the install lock could not be taken: {error}"),
             })?;
             Ok(handle)
         })
-        .await;
+        .await?;
 
-        match joined {
-            Ok(handle) => Ok(Self { _handle: handle? }),
-            Err(error) => Err(Error::Storage(format!(
-                "the locking task did not finish: {error}"
-            ))),
-        }
+        Ok(Self { _handle: handle })
     }
 }
