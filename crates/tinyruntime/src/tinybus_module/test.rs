@@ -11,8 +11,9 @@ use tinybus::transport::memory::MemoryBus;
 use tinybus::{Connection, Interface, Result as TinyBusResult};
 
 use tinyruntime_bus::{
-    Language, LanguagesResponse, LayoutRequest, LayoutResponse, ProviderDescriptor, ResolveRequest,
-    ResolveResponse, RuntimeLayout, RuntimeSettings, RuntimeSource, WorkerHarness, names,
+    ExecRequest, ExecResponse, Language, LanguagesResponse, LayoutRequest, LayoutResponse,
+    ProviderDescriptor, ResolveRequest, ResolveResponse, RuntimeLayout, RuntimeSettings,
+    RuntimeSource, WorkerHarness, names,
 };
 
 use super::{RuntimeService, setup};
@@ -246,7 +247,7 @@ async fn resolving_an_unrouted_language_fails_with_a_readable_reason() -> TinyBu
 
     let client = Connection::connect(bus.connect().await?).await?;
     let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
-    let result = proxy
+    let error = proxy
         .call::<ResolveResponse>(
             names::methods::RESOLVE,
             (ResolveRequest::probe(
@@ -254,13 +255,8 @@ async fn resolving_an_unrouted_language_fails_with_a_readable_reason() -> TinyBu
                 RuntimeSettings::new("3.12"),
             ),),
         )
-        .await;
-
-    let Err(error) = result else {
-        return Err(tinybus::Error::failed(
-            "an unrouted language unexpectedly resolved",
-        ));
-    };
+        .await
+        .expect_err("an unrouted language cannot resolve");
     let rendered = error.to_string();
     assert!(rendered.contains("python"), "got `{rendered}`");
     assert!(
@@ -353,6 +349,119 @@ async fn each_provider_is_addressed_at_its_own_object_path() -> TinyBusResult<()
         reply.languages[1].display_name.as_deref(),
         Some("Fake Python"),
         "the router reached the wrong provider's object"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_host_runs_code_through_the_router_over_the_bus() -> TinyBusResult<()> {
+    // The whole system in one call: a host asks the router to run something, the
+    // router asks a provider module what a toolchain and a worker are, and a
+    // real child process runs the job.
+    let bus = bus();
+    let scratch = tempfile::tempdir().expect("scratch directory");
+
+    let provider = Connection::connect(bus.connect().await?).await?;
+    provider
+        .serve_at(
+            names::object_path_for(FAKE_BUS_NAME).as_str().try_into()?,
+            FakeProvider,
+        )
+        .await?;
+    provider.request_name(FAKE_BUS_NAME).await?;
+
+    let module = Connection::connect(bus.connect().await?).await?;
+    setup(module.clone(), config_routing_node(scratch.path())).await?;
+
+    let client = Connection::connect(bus.connect().await?).await?;
+    let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+
+    let mut settings = RuntimeSettings::new("1.0.0");
+    settings.cache_dir = scratch.path().to_string_lossy().into_owned();
+    let request = ExecRequest::new(
+        Language::nodejs(),
+        settings,
+        crate::pool::fake_worker::Directive::Echo("over-the-bus").code(),
+    );
+
+    let reply: ExecResponse = proxy.call(names::methods::EXECUTE, (request,)).await?;
+    assert_eq!(reply.stdout, "over-the-bus");
+    assert!(reply.success());
+    assert_eq!(reply.runtime_version, "1.2.3");
+
+    // And the pool it built is now reportable.
+    let pools: tinyruntime_bus::PoolStatsResponse =
+        proxy.call(names::methods::POOL_STATS, ()).await?;
+    assert_eq!(pools.pools.len(), 1);
+    assert_eq!(pools.pools[0].jobs_total, 1);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_job_for_a_language_with_no_provider_fails_with_a_readable_reason()
+-> TinyBusResult<()> {
+    let bus = bus();
+    let scratch = tempfile::tempdir().expect("scratch directory");
+    let module = Connection::connect(bus.connect().await?).await?;
+    setup(module.clone(), config_routing_node(scratch.path())).await?;
+
+    let client = Connection::connect(bus.connect().await?).await?;
+    let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+
+    let error = proxy
+        .call::<ExecResponse>(
+            names::methods::EXECUTE,
+            (ExecRequest::new(
+                Language::python(),
+                RuntimeSettings::new("3.12"),
+                "print(1)",
+            ),),
+        )
+        .await
+        .expect_err("an unrouted language cannot run anything");
+    assert!(error.to_string().contains("python"), "got `{error}`");
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_cached_install_is_reported_through_the_routers_resolve() -> TinyBusResult<()> {
+    // Exercises the provider's `Layout` member, which the reuse scan is what
+    // actually calls.
+    let bus = bus();
+    let scratch = tempfile::tempdir().expect("scratch directory");
+    std::fs::create_dir_all(scratch.path().join("cache/toolchain-1.0.0"))
+        .expect("a cached install");
+
+    let provider = Connection::connect(bus.connect().await?).await?;
+    provider
+        .serve_at(
+            names::object_path_for(FAKE_BUS_NAME).as_str().try_into()?,
+            FakeProvider,
+        )
+        .await?;
+    provider.request_name(FAKE_BUS_NAME).await?;
+
+    let module = Connection::connect(bus.connect().await?).await?;
+    setup(module.clone(), config_routing_node(scratch.path())).await?;
+
+    let client = Connection::connect(bus.connect().await?).await?;
+    let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+
+    let mut settings = RuntimeSettings::new("1.0.0");
+    settings.prefer_system = false;
+    settings.cache_dir = scratch.path().join("cache").to_string_lossy().into_owned();
+    let reply: ResolveResponse = proxy
+        .call(
+            names::methods::RESOLVE,
+            (ResolveRequest::probe(Language::nodejs(), settings),),
+        )
+        .await?;
+
+    let runtime = reply.runtime.expect("the cached install is reported");
+    assert!(
+        runtime.version.ends_with("toolchain-1.0.0"),
+        "the install directory did not reach the provider: {}",
+        runtime.version
     );
     Ok(())
 }
