@@ -26,11 +26,24 @@ tinyruntime-bus = { workspace = true }
 tinybus = { workspace = true }
 tinybus-module = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+tar = { workspace = true }
+flate2 = { workspace = true }
+xz2 = { workspace = true }
+zip = { workspace = true }
+fs2 = { workspace = true }
+dirs = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true }
-# The GitHub release verifier passes an explicit empty module configuration.
-serde_json = { workspace = true }
+# The extract-and-install tests build real archives in a scratch directory.
+tempfile = { workspace = true }
 
 [features]
 default = []

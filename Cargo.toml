@@ -49,8 +49,55 @@ thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 # Positional argument arrays and the module configuration blob.
 serde_json = "1"
-# Module integration tests exercise the real asynchronous in-memory TinyBus.
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+# The module runs every download, extraction, and worker process on an async
+# runtime: `fs`/`io-util` for streaming an archive to disk, `process` for the
+# interpreter children, `net` for the loopback socket a worker's protocol runs
+# over, and `sync` for the pool's semaphore and mutexes.
+tokio = { version = "1", features = [
+    "macros",
+    "rt-multi-thread",
+    "time",
+    "fs",
+    "io-util",
+    "process",
+    "net",
+    "sync",
+] }
+# Fetching toolchain archives and provider release indexes. `rustls` rather than
+# the platform TLS stack so the module has no native TLS build dependency, and
+# `stream` so an archive is hashed and written chunk by chunk instead of being
+# buffered whole in memory.
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "stream",
+    "json",
+] }
+# Verifying that a downloaded archive is the archive the channel published. This
+# is load-bearing rather than defensive: the bytes become an interpreter this
+# host then runs code with.
+sha2 = "0.10"
+# Rendering a digest for comparison against the hex a channel publishes.
+hex = "0.4"
+# Unpacking toolchain archives. `tar` reads the entries; `flate2` and `xz2`
+# decode the two compressions release channels actually ship; `zip` covers the
+# Windows archives that are not tarballs at all.
+tar = "0.4"
+flate2 = "1"
+xz2 = "0.1"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+# A cross-process lock around an install directory, so two hosts sharing a cache
+# root cannot extract over each other.
+fs2 = "0.4"
+# The platform cache directory a managed toolchain installs into by default.
+dirs = "6"
+# Correlating a worker's protocol frames and naming per-launch staging paths.
+uuid = { version = "1", features = ["v4"] }
+# Diagnostics. The module logs into the host's subscriber, which tinybus already
+# installs, so this is the same facade the bus itself uses.
+tracing = "0.1"
+# Temporary directories for the tests that exercise the extract and install
+# pipeline against real archives.
+tempfile = "3"
 
 # Lints apply to every member that opts in with `[lints] workspace = true`, and
 # to every target of that member. CI runs clippy with `-D warnings`, so anything

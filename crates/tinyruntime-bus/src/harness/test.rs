@@ -1,4 +1,5 @@
 //! Unit tests for the worker harness payload.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use super::{WORKER_PROTOCOL_VERSION, WorkerHarness};
 
