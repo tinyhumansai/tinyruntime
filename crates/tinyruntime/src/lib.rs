@@ -38,8 +38,8 @@
 //! - [`pool`] — warm workers, their framing, and the backpressure in front of
 //!   them.
 //! - [`exec`] — [`Engine`], which is all of the above in one object.
-//! - [`tinybus_module`] — the bus face, and the [`ModuleConfig`] a host supplies
-//!   to say which languages this router routes and where their providers are.
+//! - [`config`] — the [`ModuleConfig`] a host supplies at load time to say which
+//!   languages this router routes and where their providers are.
 //!
 //! Every payload type comes from [`tinyruntime_bus`] and is re-exported here, so
 //! `tinyruntime::ExecRequest` and `tinyruntime_bus::ExecRequest` are the same
@@ -72,6 +72,7 @@
 //! ```
 
 pub mod archive;
+pub mod config;
 pub mod download;
 pub mod error;
 pub mod exec;
@@ -80,14 +81,14 @@ pub mod provider;
 pub mod resolve;
 pub mod store;
 
-pub mod tinybus_module;
+mod tinybus_module;
 
 pub use error::{Error, Result};
 pub use exec::Engine;
 pub use pool::{LangPool, Pools};
 pub use provider::{BusProvider, Provider, Registry, Route};
 pub use resolve::Resolver;
-pub use tinybus_module::{ModuleConfig, ProviderRoute};
+pub use config::{ModuleConfig, ProviderRoute};
 
 // The wire contract, re-exported whole. A consumer takes one dependency rather
 // than two, and the payload types it names here are the very types the module

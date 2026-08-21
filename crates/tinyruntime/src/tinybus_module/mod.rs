@@ -29,13 +29,11 @@ use tinyruntime_bus::{
     ResolveResponse, names,
 };
 
+use crate::config::ModuleConfig;
 use crate::error::Error;
 use crate::exec::Engine;
 use crate::provider::{BusProvider, Registry};
 
-mod config;
-
-pub use config::{ModuleConfig, ProviderRoute};
 
 /// The object this module serves.
 struct RuntimeService {
