@@ -301,6 +301,22 @@ impl Worker {
         }
     }
 
+    /// Whether this worker's child has already exited.
+    ///
+    /// Checked before a parked worker is reused. Without it a worker that died
+    /// while idle is only discovered *after* the job has been written to it —
+    /// and because a TCP write into a closed peer's buffer succeeds, that
+    /// discovery arrives at the read, which is tagged post-dispatch and never
+    /// retried. The job provably never ran, so failing it would be wrong; this
+    /// check is what turns that case back into a transparent respawn.
+    ///
+    /// It cannot be exhaustive — the child may die between this call and the
+    /// write — and it is not meant to be. The remaining window stays correctly
+    /// classified as terminal.
+    pub fn has_exited(&mut self) -> bool {
+        matches!(self.child.try_wait(), Ok(Some(_)) | Err(_))
+    }
+
     /// Whether this worker has served its job budget. A budget of `0` disables
     /// recycling.
     #[must_use]

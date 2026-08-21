@@ -363,8 +363,10 @@ async fn a_parked_worker_that_died_is_replaced_and_the_job_still_runs() {
         .await
         .expect("the first job runs, then the worker exits");
 
-    // Let the peer's close reach this side, so the next write fails rather than
-    // landing in a send buffer.
+    // Let the child actually exit before the next take, which is when the pool
+    // notices. A TCP write into a closed peer's buffer succeeds, so waiting for
+    // a write failure instead would never come — that is exactly the trap this
+    // path exists to avoid.
     tokio::time::sleep(Duration::from_millis(300)).await;
 
     let response = run(&pool, &Directive::Echo("after-respawn"), None)

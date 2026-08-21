@@ -243,17 +243,31 @@ impl LangPool {
         }
     }
 
-    /// Take a still-fresh parked worker, or spawn one.
+    /// Take a still-usable parked worker, or spawn one.
+    ///
+    /// A parked worker is discarded when it is past its time-to-live, and also
+    /// when its child has already exited — see [`Worker::has_exited`] for why
+    /// that second check is what keeps a job that never ran from being failed
+    /// as though it might have.
     async fn take_or_spawn(&self) -> Result<Worker> {
         {
             let mut idle = self.idle.lock().await;
-            while let Some(worker) = idle.pop() {
-                match self.settings.idle_ttl_secs() {
-                    Some(ttl) if worker.idle_expired(Duration::from_secs(ttl)) => {
-                        worker.shutdown();
-                    }
-                    _ => return Ok(worker),
+            while let Some(mut worker) = idle.pop() {
+                if let Some(ttl) = self.settings.idle_ttl_secs()
+                    && worker.idle_expired(Duration::from_secs(ttl))
+                {
+                    worker.shutdown();
+                    continue;
                 }
+                if worker.has_exited() {
+                    tracing::debug!(
+                        language = self.launch.language.as_str(),
+                        "[tinyruntime::pool] a parked worker had died; replacing it"
+                    );
+                    worker.shutdown();
+                    continue;
+                }
+                return Ok(worker);
             }
         }
         self.spawn().await
