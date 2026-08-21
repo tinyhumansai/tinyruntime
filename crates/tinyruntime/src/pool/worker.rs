@@ -149,9 +149,9 @@ impl Worker {
             "[tinyruntime::pool] spawning a worker"
         );
 
-        let listener = TcpListener::bind(("127.0.0.1", 0)).await.map_err(|error| {
-            format!("the worker protocol listener could not be opened: {error}")
-        })?;
+        let listener = TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .map_err(|error| format!("the protocol listener could not be opened: {error}"))?;
         let address = listener
             .local_addr()
             .map_err(|error| format!("the worker protocol address could not be read: {error}"))?;
@@ -273,11 +273,7 @@ impl Worker {
                 Ok(None) => {
                     return Err(SubmitFailure::post("the worker closed its protocol stream"));
                 }
-                Err(error) => {
-                    return Err(SubmitFailure::post(format!(
-                        "the worker's reply could not be read: {error}"
-                    )));
-                }
+                Err(error) => return Err(SubmitFailure::post(read_failed(&error))),
             };
 
             let Ok(response) = serde_json::from_str::<JobResponse>(&line) else {
@@ -333,12 +329,14 @@ impl Worker {
     /// Ask the child to exit. Best effort; dropping the worker kills it anyway.
     pub fn shutdown(mut self) {
         if let Err(error) = self.child.start_kill() {
-            tracing::debug!(
-                language = self.language.as_str(),
-                "[tinyruntime::pool] a worker could not be signalled: {error}"
-            );
+            tracing::debug!("[tinyruntime::pool] a worker could not be signalled: {error}");
         }
     }
+}
+
+/// Rendered when a worker's reply cannot be read off the socket.
+fn read_failed(error: &std::io::Error) -> String {
+    format!("the worker's reply could not be read: {error}")
 }
 
 /// Read the single handshake line, or say why it never came.

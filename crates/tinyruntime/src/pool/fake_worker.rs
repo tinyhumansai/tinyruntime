@@ -133,23 +133,45 @@ pub(crate) fn launch(language: tinyruntime_bus::Language) -> Launch {
 /// Connect back to the pool and serve until it disconnects.
 ///
 /// Runs in the re-executed child, never in the parent.
+/// How a worker should behave once it has connected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Mode {
+    /// Speak the protocol properly.
+    Serve,
+    /// Connect and close without a handshake.
+    Silent,
+    /// Send something that is not a handshake at all.
+    Garbage,
+}
+
+impl Mode {
+    /// The mode a worker's marker value selects.
+    pub(crate) fn of(marker: &str) -> Self {
+        match marker {
+            "silent" => Self::Silent,
+            "garbage" => Self::Garbage,
+            _ => Self::Serve,
+        }
+    }
+}
+
 fn serve() {
     let address = std::env::var("TINYRUNTIME_PROTOCOL_ADDR").expect("the pool supplies an address");
     let token = std::env::var("TINYRUNTIME_PROTOCOL_TOKEN").ok();
-    let mode = std::env::var(WORKER_MARKER).unwrap_or_default();
+    let mode = Mode::of(&std::env::var(WORKER_MARKER).unwrap_or_default());
 
     let stream = TcpStream::connect(address).expect("the pool is listening");
-
-    // Two ways to be a worker the pool must refuse, both of which a real harness
-    // can be after a bad build.
-    if mode == "silent" {
-        return;
-    }
-    if mode == "garbage" {
-        let mut writer = stream.try_clone().expect("the socket clones");
-        send(&mut writer, "not a handshake at all");
-        std::thread::sleep(std::time::Duration::from_secs(5));
-        return;
+    match mode {
+        // Two ways to be a worker the pool must refuse, both of which a real
+        // harness can be after a bad build.
+        Mode::Silent => return,
+        Mode::Garbage => {
+            let mut writer = stream.try_clone().expect("the socket clones");
+            send(&mut writer, "not a handshake at all");
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            return;
+        }
+        Mode::Serve => {}
     }
 
     let writer = stream.try_clone().expect("the socket clones");
@@ -313,6 +335,16 @@ mod test {
             .lines()
             .map(|line| serde_json::from_str(line).expect("each frame is json"))
             .collect()
+    }
+
+    #[test]
+    fn a_marker_value_selects_how_the_worker_misbehaves() {
+        use super::Mode;
+
+        assert_eq!(Mode::of("1"), Mode::Serve);
+        assert_eq!(Mode::of(""), Mode::Serve);
+        assert_eq!(Mode::of("silent"), Mode::Silent);
+        assert_eq!(Mode::of("garbage"), Mode::Garbage);
     }
 
     #[test]

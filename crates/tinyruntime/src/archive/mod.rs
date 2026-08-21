@@ -68,22 +68,11 @@ pub async fn extract(
 
     crate::blocking::run(language, move || -> Result<PathBuf> {
         fs::create_dir_all(&staging_dir).map_err(|error| install_error(&owned, &error))?;
-        // A format this build does not know is a provider from a newer contract,
-        // which the router refuses long before here — but the payload type is
-        // `#[non_exhaustive]`, so the arm has to exist and must not panic.
         let unpacked = match format {
             ArchiveFormat::TarGz => extract::tar_gz(&archive, &staging_dir),
             ArchiveFormat::TarXz => extract::tar_xz(&archive, &staging_dir),
             ArchiveFormat::Zip => extract::zip(&archive, &staging_dir),
-            // Only reachable from a provider on a newer contract, which the
-            // router refuses long before here — but the payload type is
-            // `#[non_exhaustive]`, so the arm must exist and must not panic.
-            _ => {
-                return Err(Error::Install {
-                    language: owned,
-                    reason: UNKNOWN_FORMAT.to_string(),
-                });
-            }
+            _ => return Err(unknown_format(owned)),
         };
         unpacked.map_err(|error| install_error(&owned, &error))?;
         single_root(&staging_dir).map_err(|reason| Error::Install {
