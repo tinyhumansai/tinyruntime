@@ -92,6 +92,11 @@ fs2 = "0.4"
 dirs = "6"
 # Correlating a worker's protocol frames and naming per-launch staging paths.
 uuid = { version = "1", features = ["v4"] }
+# The provider registry holds providers behind a trait object so a language is a
+# registry entry rather than a match arm. An async trait is not object-safe on
+# its own, and hand-rolling the boxed futures would put the same six lines of
+# pinning noise in front of every provider method.
+async-trait = "0.1"
 # Diagnostics. The module logs into the host's subscriber, which tinybus already
 # installs, so this is the same facade the bus itself uses.
 tracing = "0.1"
