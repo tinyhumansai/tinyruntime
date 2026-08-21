@@ -38,10 +38,25 @@ pub use lock::InstallLock;
 /// because that is the one arrangement a repository could try to poison.
 #[must_use]
 pub fn cache_root(configured: Option<&str>, language: &Language) -> PathBuf {
+    cache_root_under(dirs::cache_dir(), configured, language)
+}
+
+/// [`cache_root`] with the platform cache supplied explicitly.
+///
+/// Split out because the fallback below only runs where the platform has no
+/// cache directory at all — a state a test cannot reach without rewriting the
+/// process environment, and the one arrangement here a repository could try to
+/// poison. Passing it in makes both branches ordinary to exercise.
+#[must_use]
+pub fn cache_root_under(
+    platform_cache: Option<PathBuf>,
+    configured: Option<&str>,
+    language: &Language,
+) -> PathBuf {
     if let Some(configured) = configured {
         return PathBuf::from(configured);
     }
-    if let Some(platform_cache) = dirs::cache_dir() {
+    if let Some(platform_cache) = platform_cache {
         return platform_cache.join("tinyruntime").join(language.as_str());
     }
     tracing::warn!(

@@ -13,6 +13,7 @@ use crate::provider::stub::StubProvider;
 use crate::provider::{Provider, Registry};
 
 fn engine_over(provider: Arc<dyn Provider>, harness_root: &std::path::Path) -> Engine {
+    crate::testing::evaluate_log_fields();
     let mut registry = Registry::new();
     registry.register(&Language::nodejs(), "ai.example.Provider", provider);
     Engine::new(registry, reqwest::Client::new(), harness_root.to_path_buf())

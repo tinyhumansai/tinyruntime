@@ -120,6 +120,7 @@ const FAKE_BUS_NAME: &str = names::providers::NODEJS;
 
 /// Start a broker and return a bus every peer in a test connects through.
 fn bus() -> MemoryBus {
+    crate::testing::evaluate_log_fields();
     let bus = MemoryBus::new();
     Broker::new().spawn(bus.clone());
     bus

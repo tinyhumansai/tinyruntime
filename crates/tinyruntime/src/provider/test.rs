@@ -10,6 +10,7 @@ use super::{Registry, Route, verify_contract};
 use crate::error::Error;
 
 fn registry_with_node() -> Registry {
+    crate::testing::evaluate_log_fields();
     let mut registry = Registry::new();
     registry.register(
         &Language::nodejs(),

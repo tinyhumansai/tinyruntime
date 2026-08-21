@@ -26,6 +26,7 @@ fn settings(cache_dir: &std::path::Path) -> RuntimeSettings {
 }
 
 fn registry_for(provider: Arc<dyn Provider>) -> Registry {
+    crate::testing::evaluate_log_fields();
     let mut registry = Registry::new();
     registry.register(&Language::nodejs(), "ai.example.Provider", provider);
     registry

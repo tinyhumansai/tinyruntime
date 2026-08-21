@@ -6,6 +6,7 @@ use tinyruntime_bus::{Language, PoolSettings};
 use super::{Launch, Pools};
 
 fn launch(language: Language) -> Launch {
+    crate::testing::evaluate_log_fields();
     Launch {
         language,
         binary: "/usr/bin/node".into(),

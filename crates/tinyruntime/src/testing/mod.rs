@@ -111,3 +111,47 @@ pub(crate) fn digest(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     hex::encode(Sha256::digest(bytes))
 }
+
+/// Make every `tracing` macro in the crate actually evaluate its fields.
+///
+/// Without a subscriber, `tracing` short-circuits before formatting, so a log
+/// line's field expressions never run. That is invisible until something in one
+/// of them panics — a `Display` on a poisoned lock, an index into an empty
+/// slice — at which point it takes down whichever task happened to be logging.
+///
+/// Installing a subscriber that enables everything and renders nothing keeps the
+/// suite silent while still running those expressions.
+pub(crate) fn evaluate_log_fields() {
+    use std::sync::Once;
+
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        // A failure here means a subscriber is already installed, which is fine:
+        // the point is that one exists, not that this one won.
+        let _ = tracing::subscriber::set_global_default(EvaluateFields);
+    });
+}
+
+/// A subscriber that enables every level and discards every record.
+struct EvaluateFields;
+
+impl tracing::Subscriber for EvaluateFields {
+    fn enabled(&self, _metadata: &tracing::Metadata<'_>) -> bool {
+        // The whole point: saying yes is what makes the field expressions run.
+        true
+    }
+
+    fn new_span(&self, _span: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+        tracing::span::Id::from_u64(1)
+    }
+
+    fn record(&self, _span: &tracing::span::Id, _values: &tracing::span::Record<'_>) {}
+
+    fn record_follows_from(&self, _span: &tracing::span::Id, _follows: &tracing::span::Id) {}
+
+    fn event(&self, _event: &tracing::Event<'_>) {}
+
+    fn enter(&self, _span: &tracing::span::Id) {}
+
+    fn exit(&self, _span: &tracing::span::Id) {}
+}

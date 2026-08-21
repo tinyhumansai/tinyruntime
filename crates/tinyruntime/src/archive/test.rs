@@ -10,6 +10,7 @@ use tinyruntime_bus::{ArchiveFormat, Language};
 use super::{extract, single_root};
 use crate::error::Error;
 use crate::testing;
+use crate::testing::evaluate_log_fields;
 
 /// Build a `.tar.gz` holding one root directory with one file in it.
 fn write_tar_gz(path: &Path, root: &str) {
@@ -43,6 +44,7 @@ fn write_zip(path: &Path, root: &str) {
 
 #[tokio::test]
 async fn unpacks_a_tarball_and_returns_its_single_root() {
+    evaluate_log_fields();
     let scratch = tempfile::tempdir().unwrap();
     let archive = scratch.path().join("toolchain.tar.gz");
     write_tar_gz(&archive, "toolchain-1.2.3");
@@ -63,6 +65,7 @@ async fn unpacks_a_tarball_and_returns_its_single_root() {
 #[cfg(unix)]
 #[tokio::test]
 async fn a_tarball_keeps_the_executable_bit() {
+    evaluate_log_fields();
     // An interpreter that loses `+x` during extraction installs cleanly and then
     // cannot be run, which surfaces much later as a confusing spawn failure.
     use std::os::unix::fs::PermissionsExt;
@@ -92,6 +95,7 @@ async fn a_tarball_keeps_the_executable_bit() {
 
 #[tokio::test]
 async fn unpacks_a_zip_archive() {
+    evaluate_log_fields();
     let scratch = tempfile::tempdir().unwrap();
     let archive = scratch.path().join("toolchain.zip");
     write_zip(&archive, "toolchain-1.2.3");
@@ -113,6 +117,7 @@ async fn unpacks_a_zip_archive() {
 
 #[tokio::test]
 async fn a_missing_archive_fails_as_an_install_error() {
+    evaluate_log_fields();
     let scratch = tempfile::tempdir().unwrap();
     let error = extract(
         &scratch.path().join("absent.tar.gz"),
@@ -127,6 +132,7 @@ async fn a_missing_archive_fails_as_an_install_error() {
 
 #[test]
 fn an_archive_with_no_root_directory_is_refused() {
+    evaluate_log_fields();
     let scratch = tempfile::tempdir().unwrap();
     fs::write(scratch.path().join("loose-file"), b"x").unwrap();
     let error = single_root(scratch.path()).expect_err("a rootless archive is refused");
@@ -135,6 +141,7 @@ fn an_archive_with_no_root_directory_is_refused() {
 
 #[test]
 fn an_archive_with_several_root_directories_is_refused() {
+    evaluate_log_fields();
     // Promoting one of them would install something nobody chose.
     let scratch = tempfile::tempdir().unwrap();
     fs::create_dir(scratch.path().join("one")).unwrap();
@@ -145,6 +152,7 @@ fn an_archive_with_several_root_directories_is_refused() {
 
 #[test]
 fn a_single_root_is_returned_ignoring_stray_files() {
+    evaluate_log_fields();
     let scratch = tempfile::tempdir().unwrap();
     fs::create_dir(scratch.path().join("toolchain-1.0.0")).unwrap();
     fs::write(scratch.path().join("LICENSE"), b"x").unwrap();
@@ -154,6 +162,7 @@ fn a_single_root_is_returned_ignoring_stray_files() {
 
 #[tokio::test]
 async fn unpacks_an_xz_tarball() {
+    evaluate_log_fields();
     // The format every Unix Node distribution ships as, and the only one with a
     // decoder this crate would otherwise never exercise.
     let scratch = tempfile::tempdir().unwrap();
@@ -180,6 +189,7 @@ async fn unpacks_an_xz_tarball() {
 #[cfg(unix)]
 #[tokio::test]
 async fn a_zip_restores_the_mode_bits_it_carries() {
+    evaluate_log_fields();
     // Windows archives are zips, and an interpreter that arrives without its
     // execute bit installs cleanly and then cannot be run.
     use std::os::unix::fs::PermissionsExt;
@@ -207,6 +217,7 @@ async fn a_zip_restores_the_mode_bits_it_carries() {
 
 #[tokio::test]
 async fn a_gzip_archive_that_is_not_one_fails_as_an_install_error() {
+    evaluate_log_fields();
     let scratch = tempfile::tempdir().unwrap();
     let archive = scratch.path().join("toolchain.tar.gz");
     fs::write(&archive, b"not compressed at all").unwrap();
@@ -224,6 +235,7 @@ async fn a_gzip_archive_that_is_not_one_fails_as_an_install_error() {
 
 #[tokio::test]
 async fn an_xz_archive_that_is_not_one_fails_as_an_install_error() {
+    evaluate_log_fields();
     let scratch = tempfile::tempdir().unwrap();
     let archive = scratch.path().join("toolchain.tar.xz");
     fs::write(&archive, b"not compressed at all").unwrap();
@@ -241,6 +253,7 @@ async fn an_xz_archive_that_is_not_one_fails_as_an_install_error() {
 
 #[tokio::test]
 async fn a_zip_that_is_not_one_fails_as_an_install_error() {
+    evaluate_log_fields();
     let scratch = tempfile::tempdir().unwrap();
     let archive = scratch.path().join("toolchain.zip");
     fs::write(&archive, b"PK not really").unwrap();
@@ -258,6 +271,7 @@ async fn a_zip_that_is_not_one_fails_as_an_install_error() {
 
 #[tokio::test]
 async fn a_zip_holding_only_files_is_refused_for_having_no_root() {
+    evaluate_log_fields();
     // Every toolchain archive is single-rooted. One that is not did not come
     // from where the provider said it did.
     let scratch = tempfile::tempdir().unwrap();

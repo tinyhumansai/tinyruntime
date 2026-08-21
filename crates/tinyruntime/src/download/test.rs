@@ -152,6 +152,89 @@ async fn an_unreachable_channel_reports_a_download_failure() {
     assert!(error.is_retryable(), "a failed transfer is worth retrying");
 }
 
+#[tokio::test]
+async fn a_channel_answering_with_an_error_status_says_which() {
+    // A 404 is a channel problem worth naming, and reaching it exercises the
+    // status arm of the sanitiser rather than only the transport arms.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/missing", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut line = String::new();
+            while reader.read_line(&mut line).unwrap_or(0) > 0 {
+                if line == "\r\n" {
+                    break;
+                }
+                line.clear();
+            }
+            let _ = stream.write_all(
+                b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            );
+            let _ = stream.flush();
+        }
+    });
+
+    let scratch = tempfile::tempdir().unwrap();
+    let error = fetch(
+        &Client::new(),
+        &distribution(&url),
+        &scratch.path().join("toolchain.tar.gz"),
+        &Language::nodejs(),
+    )
+    .await
+    .expect_err("a 404 is not an archive");
+
+    let Error::Download { reason, .. } = &error else {
+        panic!("got {error:?}");
+    };
+    assert!(reason.contains("404"), "got `{reason}`");
+    server.join().unwrap();
+}
+
+#[tokio::test]
+async fn the_headers_a_channel_requires_are_sent() {
+    // The GitHub release index needs an accept header; without it the channel
+    // answers with something that is not the index.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/archive", listener.local_addr().unwrap());
+    let received = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("a request arrives");
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        let mut headers = String::new();
+        let mut line = String::new();
+        while reader.read_line(&mut line).unwrap_or(0) > 0 {
+            if line == "\r\n" {
+                break;
+            }
+            headers.push_str(&line);
+            line.clear();
+        }
+        let _ = stream.write_all(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+        );
+        let _ = stream.flush();
+        headers
+    });
+
+    let scratch = tempfile::tempdir().unwrap();
+    fetch(
+        &Client::new(),
+        &distribution(&url).with_header("X-Channel-Token", "required-value"),
+        &scratch.path().join("toolchain.tar.gz"),
+        &Language::nodejs(),
+    )
+    .await
+    .expect("the archive downloads");
+
+    let headers = received.join().unwrap();
+    assert!(
+        headers.contains("x-channel-token: required-value")
+            || headers.contains("X-Channel-Token: required-value"),
+        "the header was not sent: {headers}"
+    );
+}
+
 #[test]
 fn failure_messages_never_carry_the_url() {
     // These strings reach a host's UI and bug reports. A URL can carry a token

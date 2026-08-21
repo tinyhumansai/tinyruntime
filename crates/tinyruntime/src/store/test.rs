@@ -6,18 +6,22 @@ use std::fs;
 use tinyruntime_bus::Language;
 
 use super::{
-    InstallLock, cache_root, discard, ensure_root, is_inside, is_staging, promote, staging_dir,
+    InstallLock, cache_root, cache_root_under, discard, ensure_root, is_inside, is_staging,
+    promote, staging_dir,
 };
 use crate::error::Error;
+use crate::testing::evaluate_log_fields;
 
 #[test]
 fn an_explicit_cache_directory_is_honoured_verbatim() {
+    evaluate_log_fields();
     let root = cache_root(Some("/opt/runtimes"), &Language::nodejs());
     assert_eq!(root, std::path::Path::new("/opt/runtimes"));
 }
 
 #[test]
 fn the_default_cache_directory_is_per_language_and_outside_any_workspace() {
+    evaluate_log_fields();
     // A workspace-relative default would let a checked-out repository present a
     // directory shaped like an install and have the reuse path trust it.
     let node = cache_root(None, &Language::nodejs());
@@ -32,6 +36,7 @@ fn the_default_cache_directory_is_per_language_and_outside_any_workspace() {
 
 #[test]
 fn staging_directories_are_recognisable_and_unique() {
+    evaluate_log_fields();
     let root = std::path::Path::new("/cache");
     let first = staging_dir(root);
     let second = staging_dir(root);
@@ -42,6 +47,7 @@ fn staging_directories_are_recognisable_and_unique() {
 
 #[test]
 fn a_symlink_out_of_the_cache_root_is_not_inside_it() {
+    evaluate_log_fields();
     // The reuse path trusts what it finds under the cache root, so a link
     // planted there must not smuggle in a directory from elsewhere.
     let root = tempfile::tempdir().unwrap();
@@ -64,6 +70,7 @@ fn a_symlink_out_of_the_cache_root_is_not_inside_it() {
 
 #[tokio::test]
 async fn promoting_installs_the_staged_directory() {
+    evaluate_log_fields();
     let root = tempfile::tempdir().unwrap();
     let staged = root.path().join(".stage-1");
     fs::create_dir_all(staged.join("bin")).unwrap();
@@ -83,6 +90,7 @@ async fn promoting_installs_the_staged_directory() {
 
 #[tokio::test]
 async fn promoting_over_an_existing_install_replaces_it_completely() {
+    evaluate_log_fields();
     let root = tempfile::tempdir().unwrap();
     let destination = root.path().join("toolchain-1.0.0");
     fs::create_dir_all(&destination).unwrap();
@@ -105,6 +113,7 @@ async fn promoting_over_an_existing_install_replaces_it_completely() {
 
 #[tokio::test]
 async fn a_failed_promotion_leaves_the_previous_install_in_place() {
+    evaluate_log_fields();
     // Losing a working toolchain to a failed upgrade is worse than the upgrade
     // failing, so the displaced install is restored rather than discarded.
     let root = tempfile::tempdir().unwrap();
@@ -127,6 +136,7 @@ async fn a_failed_promotion_leaves_the_previous_install_in_place() {
 
 #[tokio::test]
 async fn the_install_lock_is_released_when_it_is_dropped() {
+    evaluate_log_fields();
     let root = tempfile::tempdir().unwrap();
     let install_dir = root.path().join("toolchain-1.0.0");
 
@@ -147,12 +157,14 @@ async fn the_install_lock_is_released_when_it_is_dropped() {
 
 #[tokio::test]
 async fn discarding_a_missing_directory_is_not_an_error() {
+    evaluate_log_fields();
     let root = tempfile::tempdir().unwrap();
     discard(&root.path().join("never-existed")).await;
 }
 
 #[test]
 fn a_language_with_no_platform_cache_still_gets_a_root() {
+    evaluate_log_fields();
     // Only reachable where `dirs` has no answer, but the fallback must be a real
     // path rather than an empty one — an install into "" would land anywhere.
     let root = cache_root(None, &Language::new("ruby"));
@@ -162,6 +174,7 @@ fn a_language_with_no_platform_cache_still_gets_a_root() {
 
 #[test]
 fn a_path_that_is_not_there_is_not_inside_anything() {
+    evaluate_log_fields();
     // `is_inside` canonicalises, which fails for a path that does not exist.
     // Answering "yes" would let the reuse scan trust a directory that vanished.
     let root = tempfile::tempdir().unwrap();
@@ -171,6 +184,7 @@ fn a_path_that_is_not_there_is_not_inside_anything() {
 
 #[test]
 fn a_sibling_directory_is_not_inside_the_cache_root() {
+    evaluate_log_fields();
     let first = tempfile::tempdir().unwrap();
     let second = tempfile::tempdir().unwrap();
     assert!(!is_inside(first.path(), second.path()));
@@ -178,6 +192,7 @@ fn a_sibling_directory_is_not_inside_the_cache_root() {
 
 #[tokio::test]
 async fn ensuring_a_root_creates_every_missing_level() {
+    evaluate_log_fields();
     let scratch = tempfile::tempdir().unwrap();
     let nested = scratch.path().join("a/b/c");
     ensure_root(&nested).await.expect("the root is created");
@@ -188,6 +203,7 @@ async fn ensuring_a_root_creates_every_missing_level() {
 
 #[tokio::test]
 async fn ensuring_a_root_under_a_file_reports_a_storage_failure() {
+    evaluate_log_fields();
     let scratch = tempfile::tempdir().unwrap();
     let blocker = scratch.path().join("not-a-directory");
     fs::write(&blocker, b"x").unwrap();
@@ -200,6 +216,7 @@ async fn ensuring_a_root_under_a_file_reports_a_storage_failure() {
 
 #[tokio::test]
 async fn promoting_creates_the_cache_root_when_it_is_missing() {
+    evaluate_log_fields();
     let scratch = tempfile::tempdir().unwrap();
     let staged = scratch.path().join("staged");
     fs::create_dir_all(&staged).unwrap();
@@ -214,6 +231,7 @@ async fn promoting_creates_the_cache_root_when_it_is_missing() {
 
 #[tokio::test]
 async fn a_second_holder_waits_for_the_first_to_release() {
+    evaluate_log_fields();
     // Two processes deciding to install the same toolchain at the same moment is
     // the case this lock exists for: the second must wait, not proceed.
     let root = tempfile::tempdir().unwrap();
@@ -242,6 +260,7 @@ async fn a_second_holder_waits_for_the_first_to_release() {
 
 #[tokio::test]
 async fn a_lock_under_an_unusable_parent_reports_an_install_failure() {
+    evaluate_log_fields();
     let scratch = tempfile::tempdir().unwrap();
     let blocker = scratch.path().join("not-a-directory");
     fs::write(&blocker, b"x").unwrap();
@@ -253,4 +272,39 @@ async fn a_lock_under_an_unusable_parent_reports_an_install_failure() {
         matches!(error, Error::Storage(_) | Error::Install { .. }),
         "got {error:?}"
     );
+}
+
+#[test]
+fn a_platform_with_a_cache_directory_installs_under_it() {
+    evaluate_log_fields();
+    let root = cache_root_under(
+        Some(std::path::PathBuf::from("/platform/cache")),
+        None,
+        &Language::nodejs(),
+    );
+    assert_eq!(
+        root,
+        std::path::Path::new("/platform/cache/tinyruntime/nodejs")
+    );
+}
+
+#[test]
+fn a_platform_with_no_cache_directory_falls_back_to_a_local_one() {
+    // Loud and last-resort: a workspace-relative root is the one arrangement a
+    // checked-out repository could try to poison, which is why it is never the
+    // default and why it warns.
+    evaluate_log_fields();
+    let root = cache_root_under(None, None, &Language::python());
+    assert_eq!(root, std::path::Path::new(".tinyruntime/python"));
+}
+
+#[test]
+fn an_explicit_directory_wins_over_the_platform_cache() {
+    evaluate_log_fields();
+    let root = cache_root_under(
+        Some(std::path::PathBuf::from("/platform/cache")),
+        Some("/opt/runtimes"),
+        &Language::nodejs(),
+    );
+    assert_eq!(root, std::path::Path::new("/opt/runtimes"));
 }
