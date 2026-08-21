@@ -352,3 +352,115 @@ async fn a_job_records_how_long_it_waited_for_a_worker() {
     // is populated separately from the run time rather than left at a default.
     assert!(response.queue_wait_ms < 5_000);
 }
+
+#[tokio::test]
+async fn a_parked_worker_that_died_is_replaced_and_the_job_still_runs() {
+    // The one case where a retry is safe: the worker died between jobs, so the
+    // write fails and the job provably never left. Without the respawn, an idle
+    // timeout on the far side would surface as a user-visible failure.
+    let pool = live_pool(1);
+    run(&pool, &Directive::ExitAfterReply, None)
+        .await
+        .expect("the first job runs, then the worker exits");
+
+    // Let the peer's close reach this side, so the next write fails rather than
+    // landing in a send buffer.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let response = run(&pool, &Directive::Echo("after-respawn"), None)
+        .await
+        .expect("the job runs on a fresh worker");
+    assert_eq!(response.stdout, "after-respawn");
+    assert_eq!(
+        pool.stats().await.worker_spawns,
+        2,
+        "the dead worker was not replaced"
+    );
+}
+
+#[tokio::test]
+async fn a_workers_own_output_is_drained_rather_than_parsed() {
+    // A job owns the process's stdout. The pool reads and discards it so a
+    // chatty job never blocks on a full pipe — and never has it mistaken for a
+    // protocol frame.
+    let pool = live_pool(1);
+    let response = run(&pool, &Directive::Print("to-fd-one"), None)
+        .await
+        .expect("the job runs");
+    assert_eq!(
+        response.stdout, "to-fd-one",
+        "the reply is the harness's, not what landed on the descriptor"
+    );
+}
+
+#[tokio::test]
+async fn a_parked_worker_past_its_time_to_live_is_not_reused() {
+    let settings = PoolSettings::default()
+        .with_max_workers(1)
+        .with_idle_ttl_secs(1)
+        .with_recycle_after_jobs(0);
+    let pool = LangPool::start(
+        fake_worker::launch(Language::nodejs()),
+        settings,
+        "1.0.0-test".to_string(),
+    );
+
+    run(&pool, &Directive::Echo("first"), None)
+        .await
+        .expect("the first job runs");
+    tokio::time::sleep(Duration::from_millis(1_200)).await;
+    run(&pool, &Directive::Echo("second"), None)
+        .await
+        .expect("the second job runs");
+
+    assert_eq!(
+        pool.stats().await.worker_spawns,
+        2,
+        "a worker past its time-to-live was reused"
+    );
+}
+
+#[tokio::test]
+async fn the_reaper_retires_idle_workers_and_stops_when_the_pool_is_dropped() {
+    let settings = PoolSettings::default()
+        .with_max_workers(1)
+        .with_idle_ttl_secs(1)
+        .with_recycle_after_jobs(0);
+    let pool = LangPool::start(
+        fake_worker::launch(Language::nodejs()),
+        settings,
+        "1.0.0-test".to_string(),
+    );
+
+    run(&pool, &Directive::Echo("x"), None)
+        .await
+        .expect("the job runs");
+    assert_eq!(pool.stats().await.idle_workers, 1, "the worker was not parked");
+
+    // A fresh worker is not yet expired, so the reaper keeps it.
+    pool.reap().await;
+    assert_eq!(pool.stats().await.idle_workers, 1);
+
+    tokio::time::sleep(Duration::from_millis(1_200)).await;
+    pool.reap().await;
+    assert_eq!(pool.stats().await.idle_workers, 0, "an expired worker was kept");
+
+    // Run the loop at a pace a test can observe, then drop the pool: the reaper
+    // holds only a weak reference, so it must stop rather than keep it alive.
+    let weak = std::sync::Arc::downgrade(&pool);
+    super::lang_pool::spawn_reaper(weak.clone(), Duration::from_millis(20));
+    drop(pool);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(weak.strong_count(), 0, "the reaper kept the pool alive");
+}
+
+#[tokio::test]
+async fn a_worker_describes_what_it_serves_rather_than_its_descriptors() {
+    let worker = super::worker::Worker::spawn(&fake_worker::launch(Language::nodejs()))
+        .await
+        .expect("the fake worker starts");
+    let rendered = format!("{worker:?}");
+    assert!(rendered.contains("nodejs"), "got {rendered}");
+    assert!(rendered.contains("jobs_done"), "got {rendered}");
+    worker.shutdown();
+}

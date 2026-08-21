@@ -51,6 +51,11 @@ pub(crate) enum Directive<'a> {
     Misaddressed(&'a str),
     /// Emit an unparseable line before the real reply.
     Noise(&'a str),
+    /// Reply, then stop serving — a worker that dies while parked between jobs.
+    ExitAfterReply,
+    /// Write to the process's own stdout before replying, so the pool's drain of
+    /// the child's file descriptors has something to read.
+    Print(&'a str),
 }
 
 impl Directive<'_> {
@@ -65,6 +70,8 @@ impl Directive<'_> {
             Self::Die => "die".to_string(),
             Self::Misaddressed(text) => format!("misaddressed:{text}"),
             Self::Noise(text) => format!("noise:{text}"),
+            Self::ExitAfterReply => "exit-after-reply".to_string(),
+            Self::Print(text) => format!("print:{text}"),
         }
     }
 }
@@ -196,6 +203,17 @@ fn handle(writer: &mut impl Write, request: &JobRequest) -> bool {
         "noise" => {
             send(writer, "this is not json");
             reply.stdout = payload.to_string();
+        }
+        "print" => {
+            // The process's real stdout, not the reply. The pool drains it so a
+            // chatty job cannot block on a full pipe.
+            println!("{payload}");
+            let _ = std::io::stdout().flush();
+            reply.stdout = payload.to_string();
+        }
+        "exit-after-reply" => {
+            send(writer, &serde_json::to_string(&reply).expect("encodes"));
+            return false;
         }
         _ => reply.stdout = request.code.clone(),
     }

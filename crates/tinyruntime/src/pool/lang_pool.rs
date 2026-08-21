@@ -67,7 +67,10 @@ impl LangPool {
         if let Some(ttl) = pool.settings.idle_ttl_secs() {
             // The reaper holds a weak reference so a pool that has been replaced
             // is dropped normally instead of being kept alive by its own timer.
-            spawn_reaper(Arc::downgrade(&pool), Duration::from_secs(ttl));
+            spawn_reaper(
+                Arc::downgrade(&pool),
+                Duration::from_secs(ttl).max(MIN_REAP_INTERVAL),
+            );
         }
         pool
     }
@@ -268,7 +271,11 @@ impl LangPool {
     }
 
     /// Retire parked workers that have been idle beyond the time-to-live.
-    async fn reap(&self) {
+    ///
+    /// Visible to the module's tests so the reaper can be driven directly. The
+    /// alternative is a test that sleeps past [`MIN_REAP_INTERVAL`], which would
+    /// add five seconds to the suite to observe something this call decides.
+    pub(super) async fn reap(&self) {
         let Some(ttl) = self.settings.idle_ttl_secs().map(Duration::from_secs) else {
             return;
         };
@@ -304,8 +311,10 @@ impl Drop for InflightGuard<'_> {
 }
 
 /// Run the idle reaper until the pool it watches is dropped.
-fn spawn_reaper(pool: Weak<LangPool>, ttl: Duration) {
-    let interval = ttl.max(MIN_REAP_INTERVAL);
+///
+/// Takes the interval rather than deriving it, so a test can run the loop at a
+/// pace that does not add [`MIN_REAP_INTERVAL`] to the suite.
+pub(super) fn spawn_reaper(pool: Weak<LangPool>, interval: Duration) {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(interval).await;
