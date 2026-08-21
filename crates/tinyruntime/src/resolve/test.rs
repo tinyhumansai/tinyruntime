@@ -310,18 +310,12 @@ async fn a_provider_on_an_incompatible_contract_is_refused_before_installing() {
 // a concurrent install safe.
 // ---------------------------------------------------------------------------
 
-use tinyruntime_bus::ArchiveFormat;
-
 use crate::testing;
 
 /// A provider offering `archive` at `url`, and reporting whatever is installed.
-fn installing_provider(url: &str, digest: Option<&str>, layout_version: &str) -> Arc<StubProvider> {
-    let mut distribution = Distribution::new(
-        "1.0.0",
-        "toolchain-1.0.0.tar.gz",
-        url,
-        ArchiveFormat::TarGz,
-    );
+fn installing_provider(url: &str, digest: Option<&str>) -> Arc<StubProvider> {
+    let mut distribution =
+        Distribution::new("1.0.0", "toolchain-1.0.0.tar.gz", url, ArchiveFormat::TarGz);
     if let Some(digest) = digest {
         distribution = distribution.with_sha256(digest);
     }
@@ -330,18 +324,6 @@ fn installing_provider(url: &str, digest: Option<&str>, layout_version: &str) ->
             .with_distribution(distribution)
             .with_layout(layout("1.0.0", "/installed")),
     )
-    .tap_version(layout_version)
-}
-
-/// Small shim so the helper above reads in one expression.
-trait TapVersion {
-    fn tap_version(self, version: &str) -> Self;
-}
-
-impl TapVersion for Arc<StubProvider> {
-    fn tap_version(self, _version: &str) -> Self {
-        self
-    }
 }
 
 #[tokio::test]
@@ -351,7 +333,7 @@ async fn a_managed_toolchain_is_downloaded_verified_unpacked_and_promoted() {
     let digest = testing::digest(&archive);
     let (url, server) = testing::serve(archive, 1);
 
-    let provider = installing_provider(&url, Some(&digest), "1.0.0");
+    let provider = installing_provider(&url, Some(&digest));
     let resolver = resolver_over(Arc::clone(&provider) as Arc<dyn Provider>);
 
     let resolved = resolver
@@ -388,7 +370,7 @@ async fn a_second_resolution_reuses_the_install_rather_than_downloading_again() 
     let digest = testing::digest(&archive);
     let (url, server) = testing::serve(archive, 1);
 
-    let provider = installing_provider(&url, Some(&digest), "1.0.0");
+    let provider = installing_provider(&url, Some(&digest));
     let request = ResolveRequest::new(Language::nodejs(), settings(scratch.path()));
 
     // A fresh resolver each time, so the in-process memo cannot be what answers.
@@ -417,7 +399,7 @@ async fn an_archive_that_fails_verification_is_not_installed() {
     let archive = testing::single_root_archive("toolchain-1.0.0", ArchiveFormat::TarGz);
     let (url, server) = testing::serve(archive, 1);
 
-    let provider = installing_provider(&url, Some(&"00".repeat(32)), "1.0.0");
+    let provider = installing_provider(&url, Some(&"00".repeat(32)));
     let resolver = resolver_over(provider);
 
     let error = resolver
@@ -474,7 +456,7 @@ async fn an_archive_that_is_not_the_declared_format_fails_as_an_install_error() 
     let digest = testing::digest(&archive);
     let (url, server) = testing::serve(archive, 1);
 
-    let provider = installing_provider(&url, Some(&digest), "1.0.0");
+    let provider = installing_provider(&url, Some(&digest));
     let resolver = resolver_over(provider);
 
     let error = resolver
@@ -492,7 +474,7 @@ async fn an_archive_that_is_not_the_declared_format_fails_as_an_install_error() 
 #[tokio::test]
 async fn an_unreachable_channel_fails_the_install_retryably() {
     let scratch = tempfile::tempdir().unwrap();
-    let provider = installing_provider("http://127.0.0.1:1/archive", None, "1.0.0");
+    let provider = installing_provider("http://127.0.0.1:1/archive", None);
     let resolver = resolver_over(provider);
 
     let error = resolver
