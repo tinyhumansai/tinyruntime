@@ -46,8 +46,10 @@ fn a_host_can_route_a_language_this_build_never_heard_of() {
 
 #[test]
 fn an_explicit_harness_directory_is_honoured() {
-    let mut config = ModuleConfig::default();
-    config.harness_dir = "/var/lib/tinyruntime".to_string();
+    let config = ModuleConfig {
+        harness_dir: "/var/lib/tinyruntime".to_string(),
+        ..ModuleConfig::default()
+    };
     assert_eq!(
         config.harness_root(),
         std::path::Path::new("/var/lib/tinyruntime")

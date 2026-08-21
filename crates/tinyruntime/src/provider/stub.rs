@@ -1,5 +1,6 @@
 //! A provider that answers from memory, for testing the router without a bus.
 //!
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! The router's interesting behaviour — reuse before download, install under a
 //! lock, promote atomically, keep a worker warm — is all language-agnostic, so
 //! testing it should not require a second module, a release channel, or a

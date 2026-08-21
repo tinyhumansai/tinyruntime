@@ -163,10 +163,9 @@ fn failure_messages_never_carry_the_url() {
         "the URL itself is valid; only the request fails"
     );
 
-    for message in [sanitise(&timeout_error())] {
-        assert!(!message.contains("channel.invalid"), "got `{message}`");
-        assert!(!message.contains("secret-token"), "got `{message}`");
-    }
+    let message = sanitise(&timeout_error());
+    assert!(!message.contains("channel.invalid"), "got `{message}`");
+    assert!(!message.contains("secret-token"), "got `{message}`");
 }
 
 /// Produce a real timeout error to sanitise, without waiting for one.
