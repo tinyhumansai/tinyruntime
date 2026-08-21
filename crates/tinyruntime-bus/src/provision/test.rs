@@ -81,3 +81,25 @@ fn the_distribution_wire_form_is_pinned() {
     let decoded: Distribution = serde_json::from_value(value).expect("distribution round-trips");
     assert_eq!(decoded, dist);
 }
+
+#[test]
+fn an_absent_toolchain_is_an_ordinary_answer() {
+    assert_eq!(super::LayoutResponse::missing().layout, None);
+    assert_eq!(
+        super::LayoutResponse::found(layout_for_test()).layout,
+        Some(layout_for_test())
+    );
+}
+
+#[test]
+fn a_layout_request_names_the_directory_it_asks_about() {
+    assert_eq!(
+        super::LayoutRequest::new("/cache/node-v22.11.0").install_dir,
+        "/cache/node-v22.11.0"
+    );
+}
+
+fn layout_for_test() -> RuntimeLayout {
+    RuntimeLayout::new("22.11.0", "/cache/node-v22.11.0/bin")
+        .with_executable("node", "/cache/node-v22.11.0/bin/node")
+}

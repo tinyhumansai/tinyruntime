@@ -9,7 +9,9 @@
 
 mod types;
 
-pub use types::{ArchiveFormat, Distribution, ProviderDescriptor, RuntimeLayout};
+pub use types::{
+    ArchiveFormat, Distribution, LayoutRequest, LayoutResponse, ProviderDescriptor, RuntimeLayout,
+};
 
 #[cfg(test)]
 mod test;

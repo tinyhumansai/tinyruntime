@@ -202,3 +202,50 @@ impl ProviderDescriptor {
         self
     }
 }
+
+/// Ask a provider where the executables are inside an extracted install.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct LayoutRequest {
+    /// Absolute path to the directory the router extracted a toolchain into.
+    pub install_dir: String,
+}
+
+impl LayoutRequest {
+    /// Builds a request about `install_dir`.
+    #[must_use]
+    pub fn new(install_dir: impl Into<String>) -> Self {
+        Self {
+            install_dir: install_dir.into(),
+        }
+    }
+}
+
+/// A provider's answer about a toolchain that may or may not be there.
+///
+/// Both [`crate::names::provider_methods::DETECT_SYSTEM`] and
+/// [`crate::names::provider_methods::LAYOUT`] answer with this, because both ask
+/// the same question of different places: is there a usable toolchain here, and
+/// if so, where are its parts? "No" is an ordinary answer to that, not a fault.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct LayoutResponse {
+    /// The toolchain found, or `None` when there is none.
+    pub layout: Option<RuntimeLayout>,
+}
+
+impl LayoutResponse {
+    /// A reply carrying a toolchain.
+    #[must_use]
+    pub fn found(layout: RuntimeLayout) -> Self {
+        Self {
+            layout: Some(layout),
+        }
+    }
+
+    /// A reply reporting that there is no usable toolchain here.
+    #[must_use]
+    pub fn missing() -> Self {
+        Self { layout: None }
+    }
+}
