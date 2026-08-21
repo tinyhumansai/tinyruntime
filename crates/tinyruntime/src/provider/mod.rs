@@ -69,15 +69,20 @@ pub trait Provider: std::fmt::Debug + Send + Sync {
 
     /// Report where the executables are inside an extracted install.
     ///
-    /// Returning `None` means the directory holds no usable toolchain, which the
-    /// router treats as "not installed" rather than as a failure — that is how a
-    /// warm start distinguishes a real install from a leftover.
+    /// Returning `None` means the directory holds no toolchain these settings
+    /// accept, which the router treats as "not installed" rather than as a
+    /// failure. The settings are what let a provider decline an install that is
+    /// real but wrong — a Python 3.11 tree for a request that needs 3.12.
     ///
     /// # Errors
     ///
     /// Returns [`Error::ProviderUnavailable`] when the provider cannot be
     /// reached.
-    async fn layout(&self, install_dir: &str) -> Result<Option<RuntimeLayout>>;
+    async fn layout(
+        &self,
+        install_dir: &str,
+        settings: &RuntimeSettings,
+    ) -> Result<Option<RuntimeLayout>>;
 
     /// Supply the worker harness the router launches for this language.
     ///

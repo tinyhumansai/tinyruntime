@@ -104,7 +104,11 @@ impl Provider for StubProvider {
             })
     }
 
-    async fn layout(&self, _install_dir: &str) -> Result<Option<RuntimeLayout>> {
+    async fn layout(
+        &self,
+        _install_dir: &str,
+        _settings: &RuntimeSettings,
+    ) -> Result<Option<RuntimeLayout>> {
         Ok(self.layout.lock().expect("uncontended in tests").clone())
     }
 
@@ -138,7 +142,11 @@ impl Provider for DownProvider {
         Err(self.down())
     }
 
-    async fn layout(&self, _install_dir: &str) -> Result<Option<RuntimeLayout>> {
+    async fn layout(
+        &self,
+        _install_dir: &str,
+        _settings: &RuntimeSettings,
+    ) -> Result<Option<RuntimeLayout>> {
         Err(self.down())
     }
 

@@ -95,11 +95,15 @@ impl Provider for BusProvider {
             .await
     }
 
-    async fn layout(&self, install_dir: &str) -> Result<Option<RuntimeLayout>> {
+    async fn layout(
+        &self,
+        install_dir: &str,
+        settings: &RuntimeSettings,
+    ) -> Result<Option<RuntimeLayout>> {
         let response: LayoutResponse = self
             .call(
                 names::provider_methods::LAYOUT,
-                (LayoutRequest::new(install_dir),),
+                (LayoutRequest::new(install_dir, settings.clone()),),
             )
             .await?;
         Ok(response.layout)
