@@ -24,6 +24,9 @@ use crate::error::{Error, Result};
 
 mod extract;
 
+/// Reported when a provider names an archive format this build cannot unpack.
+const UNKNOWN_FORMAT: &str = "the provider named an archive format this build cannot unpack";
+
 /// Extract `archive` into `staging_dir` and return the single directory it
 /// produced.
 ///
@@ -60,11 +63,13 @@ pub async fn extract(
             ArchiveFormat::TarGz => extract::tar_gz(&archive, &staging_dir),
             ArchiveFormat::TarXz => extract::tar_xz(&archive, &staging_dir),
             ArchiveFormat::Zip => extract::zip(&archive, &staging_dir),
+            // Only reachable from a provider on a newer contract, which the
+            // router refuses long before here — but the payload type is
+            // `#[non_exhaustive]`, so the arm must exist and must not panic.
             _ => {
                 return Err(Error::Install {
                     language: owned,
-                    reason: "the provider named an archive format this build cannot unpack"
-                        .to_string(),
+                    reason: UNKNOWN_FORMAT.to_string(),
                 });
             }
         };

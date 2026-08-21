@@ -141,21 +141,21 @@ fn promote_blocking(staged: &Path, destination: &Path, language: &Language) -> R
         language: language.clone(),
         reason,
     };
+    // One-line wrappers so an unreachable IO failure costs one line rather than
+    // four. Each of these can only fire on a filesystem fault, and a four-line
+    // closure per site turns that into a wall of code nothing ever runs.
+    let failed = |what: &str, error: &std::io::Error| install_error(format!("{what}: {error}"));
 
     if let Some(parent) = destination.parent() {
-        fs::create_dir_all(parent).map_err(|error| {
-            install_error(format!("the cache root could not be created: {error}"))
-        })?;
+        fs::create_dir_all(parent)
+            .map_err(|error| failed("the cache root could not be created", &error))?;
     }
 
     let displaced = if destination.exists() {
         let aside = destination.with_extension(format!("replaced-{}", std::process::id()));
         let _ = fs::remove_dir_all(&aside);
-        fs::rename(destination, &aside).map_err(|error| {
-            install_error(format!(
-                "the existing install could not be moved aside: {error}"
-            ))
-        })?;
+        fs::rename(destination, &aside)
+            .map_err(|error| failed("the existing install could not be moved aside", &error))?;
         Some(aside)
     } else {
         None

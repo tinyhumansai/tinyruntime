@@ -136,6 +136,44 @@ async fn an_undigested_channel_still_installs() {
 }
 
 #[tokio::test]
+async fn a_transfer_that_ends_early_is_reported_and_the_partial_file_removed() {
+    // The channel promised more bytes than it sent. The partial file must not
+    // survive: the install path reuses an archive it finds on disk.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/archive", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut line = String::new();
+            while reader.read_line(&mut line).unwrap_or(0) > 0 {
+                if line == "\r\n" {
+                    break;
+                }
+                line.clear();
+            }
+            // Declare far more than is sent, then hang up.
+            let _ = stream.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 1024\r\nConnection: close\r\n\r\nshort",
+            );
+            let _ = stream.flush();
+        }
+    });
+
+    let scratch = tempfile::tempdir().unwrap();
+    let target = scratch.path().join("toolchain.tar.gz");
+    let error = fetch(&Client::new(), &distribution(&url), &target, &Language::nodejs())
+        .await
+        .expect_err("a truncated transfer is not an archive");
+
+    let Error::Download { reason, .. } = &error else {
+        panic!("got {error:?}");
+    };
+    assert!(reason.contains("ended early"), "got `{reason}`");
+    assert!(!target.exists(), "the partial file was left behind");
+    server.join().unwrap();
+}
+
+#[tokio::test]
 async fn an_unreachable_channel_reports_a_download_failure() {
     // Port 1 on loopback refuses rather than hanging, so this stays fast and
     // deterministic without a network.

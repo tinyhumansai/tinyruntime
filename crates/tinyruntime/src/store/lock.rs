@@ -48,20 +48,23 @@ impl InstallLock {
         let handle = crate::blocking::run(language, move || -> Result<File> {
             use fs2::FileExt;
 
+            // One-line wrapper so an unreachable IO failure costs one line
+            // rather than four.
+            let failed = |what: &str, error: &std::io::Error| Error::Install {
+                language: owned.clone(),
+                reason: format!("{what}: {error}"),
+            };
+
             let handle = OpenOptions::new()
                 .create(true)
                 .truncate(false)
                 .read(true)
                 .write(true)
                 .open(&lock_path)
-                .map_err(|error| Error::Install {
-                    language: owned.clone(),
-                    reason: format!("the install lock could not be opened: {error}"),
-                })?;
-            handle.lock_exclusive().map_err(|error| Error::Install {
-                language: owned.clone(),
-                reason: format!("the install lock could not be taken: {error}"),
-            })?;
+                .map_err(|error| failed("the install lock could not be opened", &error))?;
+            handle
+                .lock_exclusive()
+                .map_err(|error| failed("the install lock could not be taken", &error))?;
             Ok(handle)
         })
         .await?;
