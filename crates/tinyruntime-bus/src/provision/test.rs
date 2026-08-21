@@ -1,4 +1,6 @@
 //! Unit tests for the provisioning vocabulary.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 
 use super::{ArchiveFormat, Distribution, ProviderDescriptor, RuntimeLayout};
 use crate::{CONTRACT_VERSION, Language};

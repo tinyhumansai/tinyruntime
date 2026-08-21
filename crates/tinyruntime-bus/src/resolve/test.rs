@@ -1,4 +1,6 @@
 //! Unit tests for the resolution payloads.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 
 use super::{ResolveRequest, ResolveResponse, ResolvedRuntime, RuntimeSource};
 use crate::{Language, RuntimeLayout, RuntimeSettings};

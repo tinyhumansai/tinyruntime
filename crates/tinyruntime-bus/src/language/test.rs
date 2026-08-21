@@ -1,4 +1,6 @@
 //! Unit tests for the language identifier.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 
 use super::{Language, NODEJS, PYTHON};
 

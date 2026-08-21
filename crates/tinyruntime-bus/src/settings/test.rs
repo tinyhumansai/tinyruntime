@@ -1,4 +1,6 @@
 //! Unit tests for the per-language settings payload.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 
 use super::RuntimeSettings;
 
