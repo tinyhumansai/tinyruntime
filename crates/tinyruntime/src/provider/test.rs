@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tinyruntime_bus::{CONTRACT_VERSION, Language, ProviderDescriptor};
 
 use super::stub::{DownProvider, StubProvider};
-use super::{Registry, Route, verify_contract};
+use super::{Provider, Registry, Route, verify_contract};
 use crate::error::Error;
 
 fn registry_with_node() -> Registry {
@@ -151,4 +151,58 @@ fn the_contract_gate_accepts_this_build_and_refuses_another_major() {
         verify_contract(&language, &future),
         Err(Error::ProviderContract { .. })
     ));
+}
+
+#[tokio::test]
+async fn a_provider_that_is_down_fails_every_member_the_same_way() {
+    // Whichever question the router happens to ask first, the answer is the
+    // same: this language is unavailable, and it is worth retrying because the
+    // module may simply not be loaded yet.
+    let provider = DownProvider(Language::python());
+    let settings = tinyruntime_bus::RuntimeSettings::new("3.12");
+
+    let failures = [
+        provider.describe().await.err(),
+        provider.detect_system(&settings).await.err(),
+        provider.select_distribution(&settings).await.err(),
+        provider.layout("/cache", &settings).await.err(),
+        provider.harness().await.err(),
+    ];
+    for failure in failures {
+        let error = failure.expect("a down provider cannot answer");
+        assert!(
+            matches!(error, Error::ProviderUnavailable { .. }),
+            "got {error:?}"
+        );
+        assert!(error.is_retryable());
+    }
+}
+
+#[tokio::test]
+async fn a_stub_without_a_distribution_or_harness_says_so() {
+    // Guards the test double itself: a stub that silently returned something
+    // would let an install test pass without installing.
+    let stub = StubProvider::new(Language::nodejs());
+    let settings = tinyruntime_bus::RuntimeSettings::new("1.0.0");
+
+    assert!(stub.select_distribution(&settings).await.is_err());
+    assert!(stub.harness().await.is_err());
+    assert!(
+        stub.layout("/anywhere", &settings)
+            .await
+            .expect("layout answers")
+            .is_none()
+    );
+}
+
+#[test]
+fn a_route_describes_where_it_points_rather_than_its_provider() {
+    let route = Route {
+        language: Language::nodejs(),
+        bus_name: "ai.example.Provider".to_string(),
+        provider: Arc::new(StubProvider::new(Language::nodejs())),
+    };
+    let rendered = format!("{route:?}");
+    assert!(rendered.contains("nodejs"), "got {rendered}");
+    assert!(rendered.contains("ai.example.Provider"), "got {rendered}");
 }
