@@ -54,20 +54,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await??;
 
     let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
-    let reply: GreetResponse = proxy
-        .call(names::methods::GREET, (GreetRequest::new("TinyBus"),))
-        .await?;
-    if reply.greeting != "Hello, TinyBus!" {
-        return Err(io::Error::other(format!(
-            "module returned an unexpected greeting: {}",
-            reply.greeting
-        ))
-        .into());
+    let reply: LanguagesResponse = proxy.call(names::methods::LANGUAGES, ()).await?;
+    if reply.languages.is_empty() {
+        return Err(io::Error::other("module routed no languages at all").into());
     }
 
     println!(
-        "verified {archive} from {release_url} as TinyBus module `{}`",
-        info.name
+        "verified {archive} from {release_url} as TinyBus module `{}`, routing {} language(s)",
+        info.name,
+        reply.languages.len()
     );
     broker_task.abort();
     Ok(())
