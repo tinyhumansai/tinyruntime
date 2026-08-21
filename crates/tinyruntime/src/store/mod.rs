@@ -113,14 +113,17 @@ pub fn is_inside(root: &Path, candidate: &Path) -> bool {
 pub async fn promote(staged: &Path, destination: &Path, language: &Language) -> Result<()> {
     let staged = staged.to_path_buf();
     let destination = destination.to_path_buf();
+    let reported = language.clone();
     let language = language.clone();
 
-    let joined = tokio::task::spawn_blocking(move || promote_blocking(&staged, &destination, &language)).await;
+    let joined =
+        tokio::task::spawn_blocking(move || promote_blocking(&staged, &destination, &language))
+            .await;
 
     match joined {
         Ok(result) => result,
         Err(error) => Err(Error::Install {
-            language: language.clone(),
+            language: reported,
             reason: format!("the install task did not finish: {error}"),
         }),
     }

@@ -21,11 +21,23 @@ use super::Provider;
 use crate::error::{Error, Result};
 
 /// A language provider served by another module on the bus.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BusProvider {
     connection: Connection,
     language: Language,
     bus_name: String,
+}
+
+impl std::fmt::Debug for BusProvider {
+    /// A connection has no `Debug` of its own, and what identifies this provider
+    /// is where it routes rather than which peer it routes through.
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("BusProvider")
+            .field("language", &self.language)
+            .field("bus_name", &self.bus_name)
+            .finish_non_exhaustive()
+    }
 }
 
 impl BusProvider {

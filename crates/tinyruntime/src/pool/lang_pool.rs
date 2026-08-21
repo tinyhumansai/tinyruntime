@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::{Mutex, Semaphore};
 
-use tinyruntime_bus::{ExecResponse, Language, PoolSettings, PoolStats};
+use tinyruntime_bus::{ExecResponse, PoolSettings, PoolStats};
 
 use super::protocol::{JobRequest, JobResponse};
 use super::worker::{Launch, Worker};

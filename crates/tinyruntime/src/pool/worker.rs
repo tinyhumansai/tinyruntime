@@ -100,7 +100,6 @@ impl SubmitFailure {
 }
 
 /// A warm interpreter child and its bookkeeping.
-#[derive(Debug)]
 pub struct Worker {
     language: Language,
     child: Child,
@@ -108,6 +107,18 @@ pub struct Worker {
     responses: Lines<BufReader<Box<dyn AsyncRead + Send + Unpin>>>,
     jobs_done: u64,
     last_used: Instant,
+}
+
+impl std::fmt::Debug for Worker {
+    /// The two protocol streams are trait objects with no `Debug` of their own,
+    /// and a worker's identity is what it is serving, not its file descriptors.
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Worker")
+            .field("language", &self.language)
+            .field("jobs_done", &self.jobs_done)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Worker {
