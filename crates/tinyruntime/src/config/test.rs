@@ -27,7 +27,10 @@ fn a_host_can_route_a_language_somewhere_else() {
         "providers": [{ "language": "nodejs", "bus_name": "ai.example.MyNode" }]
     }))
     .unwrap();
-    assert_eq!(config.providers, vec![ProviderRoute::new(Language::nodejs(), "ai.example.MyNode")]);
+    assert_eq!(
+        config.providers,
+        vec![ProviderRoute::new(Language::nodejs(), "ai.example.MyNode")]
+    );
 }
 
 #[test]

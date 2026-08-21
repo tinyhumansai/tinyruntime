@@ -52,9 +52,8 @@ async fn a_disabled_language_is_refused_before_anything_is_probed() {
 async fn a_compatible_host_toolchain_is_reused_without_touching_a_channel() {
     // The step that keeps a developer machine from ever downloading anything.
     let scratch = tempfile::tempdir().unwrap();
-    let provider = Arc::new(
-        StubProvider::new(Language::nodejs()).with_system(layout("1.2.3", "/usr/local")),
-    );
+    let provider =
+        Arc::new(StubProvider::new(Language::nodejs()).with_system(layout("1.2.3", "/usr/local")));
     let resolver = resolver_over(Arc::clone(&provider) as Arc<dyn Provider>);
 
     let resolved = resolver
@@ -80,9 +79,8 @@ async fn prefer_system_off_skips_the_host_toolchain_entirely() {
     // A caller that needs an exact version must not be handed whatever the host
     // happens to have.
     let scratch = tempfile::tempdir().unwrap();
-    let provider = Arc::new(
-        StubProvider::new(Language::nodejs()).with_system(layout("1.2.3", "/usr/local")),
-    );
+    let provider =
+        Arc::new(StubProvider::new(Language::nodejs()).with_system(layout("1.2.3", "/usr/local")));
     let resolver = resolver_over(Arc::clone(&provider) as Arc<dyn Provider>);
 
     let mut settings = settings(scratch.path());
@@ -119,7 +117,10 @@ async fn an_installed_toolchain_in_the_cache_is_reused_on_a_cold_start() {
         .expect("the cached toolchain resolves");
 
     assert_eq!(resolved.source, RuntimeSource::Managed);
-    assert_eq!(resolved.install_dir.as_deref(), Some(installed.to_string_lossy().as_ref()));
+    assert_eq!(
+        resolved.install_dir.as_deref(),
+        Some(installed.to_string_lossy().as_ref())
+    );
     assert_eq!(provider.selections.load(Ordering::Relaxed), 0);
 }
 
@@ -130,9 +131,8 @@ async fn a_staging_directory_left_by_a_crash_is_not_reused() {
 
     // The stub would happily call any directory a toolchain, so a reuse here
     // could only come from the scan failing to skip the staging directory.
-    let provider = Arc::new(
-        StubProvider::new(Language::nodejs()).with_layout(layout("1.0.0", "/wherever")),
-    );
+    let provider =
+        Arc::new(StubProvider::new(Language::nodejs()).with_layout(layout("1.0.0", "/wherever")));
     let resolver = resolver_over(provider);
 
     let found = resolver
@@ -149,7 +149,12 @@ async fn a_staging_directory_left_by_a_crash_is_not_reused() {
 async fn a_probe_reports_nothing_rather_than_installing() {
     let scratch = tempfile::tempdir().unwrap();
     let provider = Arc::new(StubProvider::new(Language::nodejs()).with_distribution(
-        Distribution::new("1.0.0", "t.tar.gz", "http://127.0.0.1:1/t", ArchiveFormat::TarGz),
+        Distribution::new(
+            "1.0.0",
+            "t.tar.gz",
+            "http://127.0.0.1:1/t",
+            ArchiveFormat::TarGz,
+        ),
     ));
     let resolver = resolver_over(Arc::clone(&provider) as Arc<dyn Provider>);
 
@@ -187,9 +192,8 @@ async fn require_turns_nothing_provisioned_into_an_error() {
 #[tokio::test]
 async fn a_second_identical_request_is_answered_from_the_memo() {
     let scratch = tempfile::tempdir().unwrap();
-    let provider = Arc::new(
-        StubProvider::new(Language::nodejs()).with_system(layout("1.2.3", "/usr/local")),
-    );
+    let provider =
+        Arc::new(StubProvider::new(Language::nodejs()).with_system(layout("1.2.3", "/usr/local")));
     let resolver = resolver_over(Arc::clone(&provider) as Arc<dyn Provider>);
     let request = ResolveRequest::new(Language::nodejs(), settings(scratch.path()));
 
@@ -208,9 +212,8 @@ async fn a_request_for_a_different_version_is_not_answered_from_the_memo() {
     // Sharing one memo across versions would silently hand the second caller the
     // first caller's toolchain.
     let scratch = tempfile::tempdir().unwrap();
-    let provider = Arc::new(
-        StubProvider::new(Language::nodejs()).with_system(layout("1.2.3", "/usr/local")),
-    );
+    let provider =
+        Arc::new(StubProvider::new(Language::nodejs()).with_system(layout("1.2.3", "/usr/local")));
     let resolver = resolver_over(Arc::clone(&provider) as Arc<dyn Provider>);
 
     resolver
@@ -254,8 +257,14 @@ async fn a_provider_that_is_down_fails_the_resolution_retryably() {
         ))
         .await
         .expect_err("a down provider fails");
-    assert!(matches!(error, Error::ProviderUnavailable { .. }), "got {error:?}");
-    assert!(error.is_retryable(), "the module may simply not be loaded yet");
+    assert!(
+        matches!(error, Error::ProviderUnavailable { .. }),
+        "got {error:?}"
+    );
+    assert!(
+        error.is_retryable(),
+        "the module may simply not be loaded yet"
+    );
 }
 
 #[tokio::test]
@@ -277,7 +286,10 @@ async fn a_provider_on_an_incompatible_contract_is_refused_before_installing() {
         .await
         .expect_err("an incompatible provider is refused");
 
-    assert!(matches!(error, Error::ProviderContract { .. }), "got {error:?}");
+    assert!(
+        matches!(error, Error::ProviderContract { .. }),
+        "got {error:?}"
+    );
     assert_eq!(
         provider.detections.load(Ordering::Relaxed),
         0,

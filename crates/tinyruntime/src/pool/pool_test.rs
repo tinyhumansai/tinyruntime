@@ -20,10 +20,18 @@ fn launch(language: Language) -> Launch {
 async fn the_same_launch_and_tuning_reuse_one_pool() {
     let pools = Pools::new();
     let first = pools
-        .ensure(launch(Language::nodejs()), PoolSettings::default(), "22.11.0".into())
+        .ensure(
+            launch(Language::nodejs()),
+            PoolSettings::default(),
+            "22.11.0".into(),
+        )
         .await;
     let second = pools
-        .ensure(launch(Language::nodejs()), PoolSettings::default(), "22.11.0".into())
+        .ensure(
+            launch(Language::nodejs()),
+            PoolSettings::default(),
+            "22.11.0".into(),
+        )
         .await;
     assert!(
         std::sync::Arc::ptr_eq(&first, &second),
@@ -37,7 +45,11 @@ async fn a_changed_interpreter_rebuilds_the_pool() {
     // interpreter, which is the one bug a fingerprint exists to prevent.
     let pools = Pools::new();
     let first = pools
-        .ensure(launch(Language::nodejs()), PoolSettings::default(), "22.11.0".into())
+        .ensure(
+            launch(Language::nodejs()),
+            PoolSettings::default(),
+            "22.11.0".into(),
+        )
         .await;
 
     let mut upgraded = launch(Language::nodejs());
@@ -53,7 +65,11 @@ async fn a_changed_interpreter_rebuilds_the_pool() {
 async fn retuning_the_pool_rebuilds_it() {
     let pools = Pools::new();
     let first = pools
-        .ensure(launch(Language::nodejs()), PoolSettings::default(), "22.11.0".into())
+        .ensure(
+            launch(Language::nodejs()),
+            PoolSettings::default(),
+            "22.11.0".into(),
+        )
         .await;
     let retuned = PoolSettings::default().with_max_workers(8);
     let second = pools
@@ -66,10 +82,18 @@ async fn retuning_the_pool_rebuilds_it() {
 async fn each_language_gets_its_own_pool() {
     let pools = Pools::new();
     pools
-        .ensure(launch(Language::nodejs()), PoolSettings::default(), "22.11.0".into())
+        .ensure(
+            launch(Language::nodejs()),
+            PoolSettings::default(),
+            "22.11.0".into(),
+        )
         .await;
     pools
-        .ensure(launch(Language::python()), PoolSettings::default(), "3.12.4".into())
+        .ensure(
+            launch(Language::python()),
+            PoolSettings::default(),
+            "3.12.4".into(),
+        )
         .await;
 
     let stats = pools.stats().await;
@@ -82,10 +106,20 @@ async fn each_language_gets_its_own_pool() {
 async fn a_fresh_pool_reports_no_work_done() {
     let pools = Pools::new();
     pools
-        .ensure(launch(Language::nodejs()), PoolSettings::default(), "22.11.0".into())
+        .ensure(
+            launch(Language::nodejs()),
+            PoolSettings::default(),
+            "22.11.0".into(),
+        )
         .await;
     let stats = pools.stats().await;
     assert_eq!(stats[0].jobs_total, 0);
-    assert_eq!(stats[0].worker_spawns, 0, "a pool must not spawn before it is used");
-    assert_eq!(stats[0].max_workers, PoolSettings::default().effective_max_workers());
+    assert_eq!(
+        stats[0].worker_spawns, 0,
+        "a pool must not spawn before it is used"
+    );
+    assert_eq!(
+        stats[0].max_workers,
+        PoolSettings::default().effective_max_workers()
+    );
 }

@@ -85,8 +85,14 @@ async fn a_wrong_digest_is_refused_and_the_file_is_removed() {
     .await
     .expect_err("a mismatched archive is refused");
 
-    assert!(matches!(error, Error::DigestMismatch { .. }), "got {error:?}");
-    assert!(!Path::new(&target).exists(), "the rejected archive was left behind");
+    assert!(
+        matches!(error, Error::DigestMismatch { .. }),
+        "got {error:?}"
+    );
+    assert!(
+        !Path::new(&target).exists(),
+        "the rejected archive was left behind"
+    );
     server.join().unwrap();
 }
 
@@ -117,9 +123,14 @@ async fn an_undigested_channel_still_installs() {
 
     let scratch = tempfile::tempdir().unwrap();
     let target = scratch.path().join("toolchain.tar.gz");
-    fetch(&Client::new(), &distribution(&url), &target, &Language::python())
-        .await
-        .expect("a channel with no digest is usable, loudly");
+    fetch(
+        &Client::new(),
+        &distribution(&url),
+        &target,
+        &Language::python(),
+    )
+    .await
+    .expect("a channel with no digest is usable, loudly");
     assert_eq!(std::fs::read(&target).unwrap(), body);
     server.join().unwrap();
 }
@@ -147,11 +158,12 @@ fn failure_messages_never_carry_the_url() {
     // in a query string, so the message describes the kind of failure instead.
     let url = "https://channel.invalid/secret-token/archive.tar.gz";
     let error = Client::new().get(url).build().err();
-    assert!(error.is_none(), "the URL itself is valid; only the request fails");
+    assert!(
+        error.is_none(),
+        "the URL itself is valid; only the request fails"
+    );
 
-    for message in [
-        sanitise(&timeout_error()),
-    ] {
+    for message in [sanitise(&timeout_error())] {
         assert!(!message.contains("channel.invalid"), "got `{message}`");
         assert!(!message.contains("secret-token"), "got `{message}`");
     }

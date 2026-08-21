@@ -45,7 +45,11 @@ impl Registry {
             bus_name: bus_name.into(),
             provider,
         };
-        match self.routes.iter_mut().find(|existing| existing.language == language) {
+        match self
+            .routes
+            .iter_mut()
+            .find(|existing| existing.language == language)
+        {
             Some(existing) => *existing = route,
             None => self.routes.push(route),
         }
@@ -71,7 +75,10 @@ impl Registry {
     /// Every registered language, in registration order.
     #[must_use]
     pub fn languages(&self) -> Vec<Language> {
-        self.routes.iter().map(|route| route.language.clone()).collect()
+        self.routes
+            .iter()
+            .map(|route| route.language.clone())
+            .collect()
     }
 
     /// How many languages are registered.

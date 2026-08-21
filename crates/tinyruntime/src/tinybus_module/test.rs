@@ -141,8 +141,15 @@ async fn a_provider_module_on_the_bus_is_listed_as_available() -> TinyBusResult<
     let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
     let reply: LanguagesResponse = proxy.call(names::methods::LANGUAGES, ()).await?;
 
-    assert!(reply.languages[0].available, "detail: {:?}", reply.languages[0].detail);
-    assert_eq!(reply.languages[0].display_name.as_deref(), Some("Fake Node.js"));
+    assert!(
+        reply.languages[0].available,
+        "detail: {:?}",
+        reply.languages[0].detail
+    );
+    assert_eq!(
+        reply.languages[0].display_name.as_deref(),
+        Some("Fake Node.js")
+    );
     Ok(())
 }
 
@@ -174,7 +181,9 @@ async fn resolve_routes_to_a_provider_module() -> TinyBusResult<()> {
         )
         .await?;
 
-    let runtime = reply.runtime.expect("the provider reported a host toolchain");
+    let runtime = reply
+        .runtime
+        .expect("the provider reported a host toolchain");
     assert_eq!(runtime.version, "1.2.3");
     assert_eq!(runtime.source, RuntimeSource::System);
     assert_eq!(runtime.executable("node"), Some("/usr/local/bin/node"));

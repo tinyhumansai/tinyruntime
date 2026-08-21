@@ -96,7 +96,10 @@ impl Resolver {
         let provider = self.registry.provider(language)?;
         verify_contract(language, &provider.describe().await?)?;
 
-        if let Some(resolved) = self.without_network(language, settings, provider.as_ref()).await? {
+        if let Some(resolved) = self
+            .without_network(language, settings, provider.as_ref())
+            .await?
+        {
             self.remember(key, resolved.clone()).await;
             return Ok(Some(resolved));
         }

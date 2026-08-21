@@ -83,21 +83,21 @@ pub mod store;
 
 mod tinybus_module;
 
+pub use config::{ModuleConfig, ProviderRoute};
 pub use error::{Error, Result};
 pub use exec::Engine;
 pub use pool::{LangPool, Pools};
 pub use provider::{BusProvider, Provider, Registry, Route};
 pub use resolve::Resolver;
-pub use config::{ModuleConfig, ProviderRoute};
 
 // The wire contract, re-exported whole. A consumer takes one dependency rather
 // than two, and the payload types it names here are the very types the module
 // serves rather than copies of them.
 pub use tinyruntime_bus::{
     ArchiveFormat, CONTRACT_VERSION, Distribution, ExecRequest, ExecResponse, INTERFACE, Language,
-    LanguageStatus, LanguagesResponse, LayoutRequest, LayoutResponse, METHODS, NODEJS,
-    OBJECT_PATH, PROVIDER_INTERFACE, PROVIDER_METHODS, PROVIDER_OBJECT_PATH, PYTHON, PoolSettings,
-    PoolStats, PoolStatsResponse, ProviderDescriptor, ResolveRequest, ResolveResponse,
-    ResolvedRuntime, RuntimeLayout, RuntimeSettings, RuntimeSource, WORKER_PROTOCOL_VERSION,
-    WorkerHarness, is_compatible, names,
+    LanguageStatus, LanguagesResponse, LayoutRequest, LayoutResponse, METHODS, NODEJS, OBJECT_PATH,
+    PROVIDER_INTERFACE, PROVIDER_METHODS, PROVIDER_OBJECT_PATH, PYTHON, PoolSettings, PoolStats,
+    PoolStatsResponse, ProviderDescriptor, ResolveRequest, ResolveResponse, ResolvedRuntime,
+    RuntimeLayout, RuntimeSettings, RuntimeSource, WORKER_PROTOCOL_VERSION, WorkerHarness,
+    is_compatible, names,
 };

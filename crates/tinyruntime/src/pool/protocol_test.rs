@@ -32,7 +32,10 @@ fn a_request_omits_the_fields_it_does_not_set() {
         timeout_ms: None,
     };
     let line = serde_json::to_string(&request).unwrap();
-    assert!(!line.contains("cwd"), "an absent cwd was still sent: {line}");
+    assert!(
+        !line.contains("cwd"),
+        "an absent cwd was still sent: {line}"
+    );
     assert!(!line.contains("timeout_ms"));
 }
 
@@ -47,7 +50,8 @@ fn a_response_distinguishes_a_thrown_job_from_a_broken_harness() {
     assert!(threw.error.is_none());
 
     let broken: JobResponse =
-        serde_json::from_str(r#"{"id":"7","ok":false,"error":"failed to set worker cwd"}"#).unwrap();
+        serde_json::from_str(r#"{"id":"7","ok":false,"error":"failed to set worker cwd"}"#)
+            .unwrap();
     assert!(!broken.ok);
     assert_eq!(broken.error.as_deref(), Some("failed to set worker cwd"));
 }

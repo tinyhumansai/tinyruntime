@@ -31,7 +31,10 @@ fn write_zip(path: &Path, root: &str) {
     let file = fs::File::create(path).unwrap();
     let mut writer = zip::ZipWriter::new(file);
     writer
-        .start_file(format!("{root}/bin/tool"), zip::write::SimpleFileOptions::default())
+        .start_file(
+            format!("{root}/bin/tool"),
+            zip::write::SimpleFileOptions::default(),
+        )
         .unwrap();
     writer.write_all(b"#!/bin/sh\n").unwrap();
     writer.finish().unwrap();
@@ -76,8 +79,14 @@ async fn a_tarball_keeps_the_executable_bit() {
     .await
     .unwrap();
 
-    let mode = fs::metadata(root.join("bin/tool")).unwrap().permissions().mode();
-    assert!(mode & 0o111 != 0, "extracted tool is not executable: {mode:o}");
+    let mode = fs::metadata(root.join("bin/tool"))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert!(
+        mode & 0o111 != 0,
+        "extracted tool is not executable: {mode:o}"
+    );
 }
 
 #[tokio::test]
@@ -95,7 +104,10 @@ async fn unpacks_a_zip_archive() {
     .await
     .expect("the zip unpacks");
 
-    assert_eq!(fs::read_to_string(root.join("bin/tool")).unwrap(), "#!/bin/sh\n");
+    assert_eq!(
+        fs::read_to_string(root.join("bin/tool")).unwrap(),
+        "#!/bin/sh\n"
+    );
 }
 
 #[tokio::test]

@@ -59,15 +59,15 @@ pub(super) async fn run(
     let staging = store::staging_dir(&root);
     store::discard(&staging).await;
 
-    let unpacked = match archive::extract(&archive_path, &staging, distribution.format, language).await
-    {
-        Ok(unpacked) => unpacked,
-        Err(error) => {
-            store::discard(&staging).await;
-            remove_archive(&archive_path).await;
-            return Err(error);
-        }
-    };
+    let unpacked =
+        match archive::extract(&archive_path, &staging, distribution.format, language).await {
+            Ok(unpacked) => unpacked,
+            Err(error) => {
+                store::discard(&staging).await;
+                remove_archive(&archive_path).await;
+                return Err(error);
+            }
+        };
 
     let promoted = store::promote(&unpacked, &install_dir, language).await;
     store::discard(&staging).await;

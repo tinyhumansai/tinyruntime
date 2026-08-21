@@ -34,7 +34,6 @@ use crate::error::Error;
 use crate::exec::Engine;
 use crate::provider::{BusProvider, Registry};
 
-
 /// The object this module serves.
 struct RuntimeService {
     engine: Arc<Engine>,

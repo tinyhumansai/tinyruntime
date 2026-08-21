@@ -137,15 +137,18 @@ fn promote_blocking(staged: &Path, destination: &Path, language: &Language) -> R
     };
 
     if let Some(parent) = destination.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| install_error(format!("the cache root could not be created: {error}")))?;
+        fs::create_dir_all(parent).map_err(|error| {
+            install_error(format!("the cache root could not be created: {error}"))
+        })?;
     }
 
     let displaced = if destination.exists() {
         let aside = destination.with_extension(format!("replaced-{}", std::process::id()));
         let _ = fs::remove_dir_all(&aside);
         fs::rename(destination, &aside).map_err(|error| {
-            install_error(format!("the existing install could not be moved aside: {error}"))
+            install_error(format!(
+                "the existing install could not be moved aside: {error}"
+            ))
         })?;
         Some(aside)
     } else {
@@ -181,7 +184,9 @@ fn promote_blocking(staged: &Path, destination: &Path, language: &Language) -> R
 pub async fn discard(path: &Path) {
     if let Err(error) = tokio::fs::remove_dir_all(path).await {
         if error.kind() != std::io::ErrorKind::NotFound {
-            tracing::debug!("[tinyruntime::store] a staging directory could not be removed: {error}");
+            tracing::debug!(
+                "[tinyruntime::store] a staging directory could not be removed: {error}"
+            );
         }
     }
 }

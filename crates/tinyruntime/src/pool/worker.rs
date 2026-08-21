@@ -149,9 +149,9 @@ impl Worker {
             "[tinyruntime::pool] spawning a worker"
         );
 
-        let listener = TcpListener::bind(("127.0.0.1", 0))
-            .await
-            .map_err(|error| format!("the worker protocol listener could not be opened: {error}"))?;
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.map_err(|error| {
+            format!("the worker protocol listener could not be opened: {error}")
+        })?;
         let address = listener
             .local_addr()
             .map_err(|error| format!("the worker protocol address could not be read: {error}"))?;
@@ -227,8 +227,9 @@ impl Worker {
         request: &JobRequest,
         hard_deadline: Option<Duration>,
     ) -> std::result::Result<JobResponse, SubmitFailure> {
-        let mut line = serde_json::to_string(request)
-            .map_err(|error| SubmitFailure::pre(format!("the job could not be encoded: {error}")))?;
+        let mut line = serde_json::to_string(request).map_err(|error| {
+            SubmitFailure::pre(format!("the job could not be encoded: {error}"))
+        })?;
         line.push('\n');
 
         // A write that fails means the bytes never reached the worker, so the
@@ -239,10 +240,9 @@ impl Worker {
             .map_err(|error| SubmitFailure::pre(format!("the job could not be sent: {error}")))?;
         // Past here the request is in flight: the job may execute, so every later
         // failure is terminal.
-        self.requests
-            .flush()
-            .await
-            .map_err(|error| SubmitFailure::post(format!("the job could not be flushed: {error}")))?;
+        self.requests.flush().await.map_err(|error| {
+            SubmitFailure::post(format!("the job could not be flushed: {error}"))
+        })?;
 
         self.await_response(&request.id, hard_deadline).await
     }
@@ -375,7 +375,11 @@ fn verify_handshake(
 /// Deliberately never parsed as protocol: this is the job's own output, and
 /// treating it as framing is exactly the confusion the separate socket exists to
 /// prevent.
-fn drain(language: Language, stream: impl tokio::io::AsyncRead + Send + Unpin + 'static, which: &'static str) {
+fn drain(
+    language: Language,
+    stream: impl tokio::io::AsyncRead + Send + Unpin + 'static,
+    which: &'static str,
+) {
     tokio::spawn(async move {
         let mut lines = BufReader::new(stream).lines();
         while let Ok(Some(line)) = lines.next_line().await {

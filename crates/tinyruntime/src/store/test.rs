@@ -22,7 +22,10 @@ fn the_default_cache_directory_is_per_language_and_outside_any_workspace() {
     let python = cache_root(None, &Language::python());
     assert_ne!(node, python, "two languages must not share an install root");
     assert!(node.ends_with("nodejs"));
-    assert!(!node.starts_with("."), "the default must not be workspace-relative");
+    assert!(
+        !node.starts_with("."),
+        "the default must not be workspace-relative"
+    );
 }
 
 #[test]
@@ -69,7 +72,10 @@ async fn promoting_installs_the_staged_directory() {
         .await
         .expect("a staged toolchain promotes");
 
-    assert_eq!(fs::read_to_string(destination.join("bin/tool")).unwrap(), "new");
+    assert_eq!(
+        fs::read_to_string(destination.join("bin/tool")).unwrap(),
+        "new"
+    );
     assert!(!staged.exists(), "the staging directory was left behind");
 }
 

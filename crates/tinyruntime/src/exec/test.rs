@@ -39,9 +39,12 @@ async fn an_engine_routing_nothing_has_an_empty_registry() {
 #[tokio::test]
 async fn resolution_is_reachable_without_running_anything() {
     let scratch = tempfile::tempdir().unwrap();
-    let provider = Arc::new(StubProvider::new(Language::nodejs()).with_system(
-        RuntimeLayout::new("1.2.3", "/usr/local/bin").with_executable("tool", "/usr/local/bin/tool"),
-    ));
+    let provider = Arc::new(
+        StubProvider::new(Language::nodejs()).with_system(
+            RuntimeLayout::new("1.2.3", "/usr/local/bin")
+                .with_executable("tool", "/usr/local/bin/tool"),
+        ),
+    );
     let engine = engine_over(provider, scratch.path());
 
     let resolved = engine
@@ -67,7 +70,10 @@ async fn executing_an_unprovisioned_language_fails_before_a_pool_is_built() {
     );
 
     let request = ExecRequest::new(Language::nodejs(), settings(scratch.path()), "1 + 1");
-    let error = engine.execute(&request).await.expect_err("nothing to run on");
+    let error = engine
+        .execute(&request)
+        .await
+        .expect_err("nothing to run on");
 
     assert!(matches!(error, Error::Download { .. }), "got {error:?}");
     assert!(engine.pool_stats().await.is_empty());
@@ -90,19 +96,31 @@ async fn a_toolchain_missing_the_harness_executable_is_reported_as_an_empty_inst
     let engine = engine_over(provider, scratch.path());
 
     let request = ExecRequest::new(Language::nodejs(), settings(scratch.path()), "1 + 1");
-    let error = engine.execute(&request).await.expect_err("nothing to launch");
+    let error = engine
+        .execute(&request)
+        .await
+        .expect_err("nothing to launch");
     assert!(matches!(error, Error::EmptyInstall(_)), "got {error:?}");
 }
 
 #[tokio::test]
 async fn a_provider_with_no_harness_cannot_execute() {
     let scratch = tempfile::tempdir().unwrap();
-    let provider = Arc::new(StubProvider::new(Language::nodejs()).with_system(
-        RuntimeLayout::new("1.2.3", "/usr/local/bin").with_executable("node", "/usr/local/bin/node"),
-    ));
+    let provider = Arc::new(
+        StubProvider::new(Language::nodejs()).with_system(
+            RuntimeLayout::new("1.2.3", "/usr/local/bin")
+                .with_executable("node", "/usr/local/bin/node"),
+        ),
+    );
     let engine = engine_over(provider, scratch.path());
 
     let request = ExecRequest::new(Language::nodejs(), settings(scratch.path()), "1 + 1");
-    let error = engine.execute(&request).await.expect_err("no harness to launch");
-    assert!(matches!(error, Error::ProviderUnavailable { .. }), "got {error:?}");
+    let error = engine
+        .execute(&request)
+        .await
+        .expect_err("no harness to launch");
+    assert!(
+        matches!(error, Error::ProviderUnavailable { .. }),
+        "got {error:?}"
+    );
 }

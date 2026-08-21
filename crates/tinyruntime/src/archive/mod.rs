@@ -106,9 +106,9 @@ fn single_root(staging_dir: &Path) -> std::result::Result<PathBuf, String> {
     directories.sort();
 
     match directories.len() {
-        1 => directories.pop().ok_or_else(|| {
-            "the unpacked directory disappeared while being read".to_string()
-        }),
+        1 => directories
+            .pop()
+            .ok_or_else(|| "the unpacked directory disappeared while being read".to_string()),
         0 => Err("the archive expanded into no directory at all".to_string()),
         found => Err(format!(
             "the archive expanded into {found} directories, not one"

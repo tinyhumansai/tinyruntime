@@ -160,10 +160,7 @@ impl Route {
 /// # Errors
 ///
 /// Returns [`Error::ProviderContract`] when the versions cannot bind.
-pub(crate) fn verify_contract(
-    language: &Language,
-    descriptor: &ProviderDescriptor,
-) -> Result<()> {
+pub(crate) fn verify_contract(language: &Language, descriptor: &ProviderDescriptor) -> Result<()> {
     if tinyruntime_bus::is_compatible(descriptor.contract_version) {
         return Ok(());
     }

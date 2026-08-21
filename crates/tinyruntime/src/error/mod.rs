@@ -30,7 +30,9 @@ pub enum Error {
     },
 
     /// A provider answered, but against an incompatible contract version.
-    #[error("the `{language}` runtime provider speaks contract {major}.{minor}, which this build cannot bind to")]
+    #[error(
+        "the `{language}` runtime provider speaks contract {major}.{minor}, which this build cannot bind to"
+    )]
     ProviderContract {
         /// The language whose provider disagreed.
         language: Language,

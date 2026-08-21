@@ -1,7 +1,6 @@
 //! Unit tests for the execution payloads.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-
 use super::{ExecRequest, ExecResponse};
 use crate::{Language, RuntimeSettings};
 
