@@ -12,7 +12,7 @@ use crate::error::Error;
 fn registry_with_node() -> Registry {
     let mut registry = Registry::new();
     registry.register(
-        Language::nodejs(),
+        &Language::nodejs(),
         "ai.tinyhumans.runtime.nodejs.Provider",
         Arc::new(StubProvider::new(Language::nodejs())),
     );
@@ -57,7 +57,7 @@ fn a_request_naming_no_language_is_refused_rather_than_defaulted() {
 fn re_registering_a_language_replaces_its_route_without_duplicating_it() {
     let mut registry = registry_with_node();
     registry.register(
-        Language::nodejs(),
+        &Language::nodejs(),
         "ai.tinyhumans.runtime.nodejs.Override",
         Arc::new(StubProvider::new(Language::nodejs())),
     );
@@ -69,7 +69,7 @@ fn re_registering_a_language_replaces_its_route_without_duplicating_it() {
 fn registration_order_is_the_order_languages_are_reported_in() {
     let mut registry = registry_with_node();
     registry.register(
-        Language::python(),
+        &Language::python(),
         "ai.tinyhumans.runtime.python.Provider",
         Arc::new(StubProvider::new(Language::python())),
     );
@@ -94,7 +94,7 @@ async fn a_provider_that_is_down_is_a_listed_row_with_a_reason() {
     // hide every language that *is* working.
     let mut registry = registry_with_node();
     registry.register(
-        Language::python(),
+        &Language::python(),
         "ai.tinyhumans.runtime.python.Provider",
         Arc::new(DownProvider(Language::python())),
     );
@@ -119,7 +119,7 @@ async fn a_provider_on_a_future_contract_is_reported_unavailable() {
     let mut registry = Registry::new();
     let (major, minor) = CONTRACT_VERSION;
     registry.register(
-        Language::python(),
+        &Language::python(),
         "ai.tinyhumans.runtime.python.Provider",
         Arc::new(StubProvider::new(Language::python()).with_contract((major + 1, minor))),
     );

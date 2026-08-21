@@ -84,7 +84,7 @@ async fn setup(connection: Connection, config: ModuleConfig) -> TinyBusResult<()
     let mut registry = Registry::new();
     for route in &config.providers {
         registry.register(
-            route.language.clone(),
+            &route.language,
             route.bus_name.clone(),
             Arc::new(BusProvider::new(
                 connection.clone(),
