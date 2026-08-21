@@ -38,25 +38,49 @@ impl FakeProvider {
     }
 
     async fn detect_system(&self, _settings: RuntimeSettings) -> TinyBusResult<LayoutResponse> {
-        std::future::ready(Ok(LayoutResponse::found(
-            RuntimeLayout::new("1.2.3", "/usr/local/bin")
-                .with_executable("node", "/usr/local/bin/node"),
-        )))
-        .await
+        std::future::ready(Ok(LayoutResponse::found(host_toolchain()))).await
     }
 
-    async fn layout(&self, _request: LayoutRequest) -> TinyBusResult<LayoutResponse> {
-        std::future::ready(Ok(LayoutResponse::missing())).await
+    async fn layout(&self, request: LayoutRequest) -> TinyBusResult<LayoutResponse> {
+        // Echo the directory back through the version, so a test can prove the
+        // request crossed rather than being answered from a constant.
+        std::future::ready(Ok(LayoutResponse::found(RuntimeLayout::new(
+            request.install_dir,
+            "/installed/bin",
+        ))))
+        .await
     }
 
     async fn harness(&self) -> TinyBusResult<WorkerHarness> {
-        std::future::ready(Ok(WorkerHarness::new(
-            "pool_worker.js",
-            "// harness",
-            "node",
-        )))
-        .await
+        std::future::ready(Ok(worker_harness())).await
     }
+}
+
+/// The logical executable the fake harness runs under.
+const TOOL: &str = "tool";
+
+/// This test binary, presented as an installed toolchain.
+///
+/// Running a job needs a real executable on the other end, and re-executing this
+/// binary as a worker keeps that from depending on Node being installed.
+fn host_toolchain() -> RuntimeLayout {
+    let binary = std::env::current_exe().expect("a test binary has a path");
+    let bin_dir = binary
+        .parent()
+        .expect("the binary is in a directory")
+        .to_string_lossy()
+        .into_owned();
+    RuntimeLayout::new("1.2.3", bin_dir)
+        .with_executable(TOOL, binary.to_string_lossy().into_owned())
+}
+
+/// A harness whose flags make the test binary serve the worker protocol.
+fn worker_harness() -> WorkerHarness {
+    let launch = crate::pool::fake_worker::launch(Language::nodejs());
+    let mut harness = WorkerHarness::new("worker-harness", "unused by this worker", TOOL)
+        .with_env(crate::pool::fake_worker::WORKER_MARKER, "1");
+    harness.args_before_script = launch.args.clone();
+    harness
 }
 
 /// A second provider, so the two cannot be confused for one another.
@@ -234,7 +258,10 @@ async fn resolve_routes_to_a_provider_module() -> TinyBusResult<()> {
         .expect("the provider reported a host toolchain");
     assert_eq!(runtime.version, "1.2.3");
     assert_eq!(runtime.source, RuntimeSource::System);
-    assert_eq!(runtime.executable("node"), Some("/usr/local/bin/node"));
+    assert!(
+        runtime.executable(TOOL).is_some(),
+        "the provider's toolchain did not cross the bus"
+    );
     Ok(())
 }
 
@@ -383,15 +410,6 @@ async fn a_host_runs_code_through_the_router_over_the_bus() -> TinyBusResult<()>
         settings,
         crate::pool::fake_worker::Directive::Echo("over-the-bus").code(),
     );
-
-    // Diagnostic: confirm what the router resolved before it tried to launch.
-    let resolved: ResolveResponse = proxy
-        .call(
-            names::methods::RESOLVE,
-            (ResolveRequest::probe(Language::nodejs(), request.settings.clone()),),
-        )
-        .await?;
-    eprintln!("RESOLVED = {:?}", resolved.runtime);
 
     let reply: ExecResponse = proxy.call(names::methods::EXECUTE, (request,)).await?;
     assert_eq!(reply.stdout, "over-the-bus");
