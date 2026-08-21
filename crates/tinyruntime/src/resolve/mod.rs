@@ -18,7 +18,6 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
 
 use reqwest::Client;
 use tokio::sync::Mutex;
@@ -29,7 +28,7 @@ use tinyruntime_bus::{
 
 use crate::error::{Error, Result};
 use crate::provider::{Provider, Registry, verify_contract};
-use crate::{archive, download, store};
+use crate::store;
 
 mod install;
 mod reuse;
@@ -196,9 +195,6 @@ fn managed(language: &Language, install_dir: &Path, layout: RuntimeLayout) -> Re
     ResolvedRuntime::from_layout(language.clone(), RuntimeSource::Managed, layout)
         .with_install_dir(install_dir.to_string_lossy().into_owned())
 }
-
-/// Shared by the reuse scan and the install path.
-type SharedProvider = Arc<dyn Provider>;
 
 #[cfg(test)]
 mod test;
