@@ -26,26 +26,35 @@ struct FakeProvider;
 #[tinybus::interface(name = "ai.tinyhumans.runtime.Provider")]
 impl FakeProvider {
     async fn describe(&self) -> TinyBusResult<ProviderDescriptor> {
-        Ok(ProviderDescriptor::new(
+        // The interface macro dispatches futures, so every member is `async`
+        // even where the answer is a constant.
+        std::future::ready(Ok(ProviderDescriptor::new(
             Language::nodejs(),
             "Fake Node.js",
             "1.0.0",
-        ))
+        )))
+        .await
     }
 
     async fn detect_system(&self, _settings: RuntimeSettings) -> TinyBusResult<LayoutResponse> {
-        Ok(LayoutResponse::found(
+        std::future::ready(Ok(LayoutResponse::found(
             RuntimeLayout::new("1.2.3", "/usr/local/bin")
                 .with_executable("node", "/usr/local/bin/node"),
-        ))
+        )))
+        .await
     }
 
     async fn layout(&self, _request: LayoutRequest) -> TinyBusResult<LayoutResponse> {
-        Ok(LayoutResponse::missing())
+        std::future::ready(Ok(LayoutResponse::missing())).await
     }
 
     async fn harness(&self) -> TinyBusResult<WorkerHarness> {
-        Ok(WorkerHarness::new("pool_worker.js", "// harness", "node"))
+        std::future::ready(Ok(WorkerHarness::new(
+            "pool_worker.js",
+            "// harness",
+            "node",
+        )))
+        .await
     }
 }
 
