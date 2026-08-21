@@ -54,6 +54,43 @@ impl PoolSettings {
     }
 }
 
+impl PoolSettings {
+    /// Sets the concurrent worker count.
+    #[must_use]
+    pub fn with_max_workers(mut self, max_workers: usize) -> Self {
+        self.max_workers = max_workers;
+        self
+    }
+
+    /// Sets how long a parked worker survives, `0` for forever.
+    #[must_use]
+    pub fn with_idle_ttl_secs(mut self, idle_ttl_secs: u64) -> Self {
+        self.idle_ttl_secs = idle_ttl_secs;
+        self
+    }
+
+    /// Sets the job budget after which a worker is retired, `0` to disable.
+    #[must_use]
+    pub fn with_recycle_after_jobs(mut self, recycle_after_jobs: u64) -> Self {
+        self.recycle_after_jobs = recycle_after_jobs;
+        self
+    }
+
+    /// Sets how many jobs may queue beyond the worker slots.
+    #[must_use]
+    pub fn with_max_queue_depth(mut self, max_queue_depth: usize) -> Self {
+        self.max_queue_depth = max_queue_depth;
+        self
+    }
+
+    /// Turns the warm-worker pool on or off.
+    #[must_use]
+    pub fn with_enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+}
+
 impl Default for PoolSettings {
     /// A small pool sized for a host running many agents rather than one big job.
     fn default() -> Self {

@@ -54,10 +54,7 @@ async fn retuning_the_pool_rebuilds_it() {
     let first = pools
         .ensure(launch(Language::nodejs()), PoolSettings::default(), "22.11.0".into())
         .await;
-    let retuned = PoolSettings {
-        max_workers: 8,
-        ..PoolSettings::default()
-    };
+    let retuned = PoolSettings::default().with_max_workers(8);
     let second = pools
         .ensure(launch(Language::nodejs()), retuned, "22.11.0".into())
         .await;
