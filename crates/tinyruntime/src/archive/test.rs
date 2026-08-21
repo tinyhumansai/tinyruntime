@@ -3,6 +3,8 @@
 
 use std::fs;
 use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use tinyruntime_bus::{ArchiveFormat, Language};
@@ -68,8 +70,6 @@ async fn a_tarball_keeps_the_executable_bit() {
     evaluate_log_fields();
     // An interpreter that loses `+x` during extraction installs cleanly and then
     // cannot be run, which surfaces much later as a confusing spawn failure.
-    use std::os::unix::fs::PermissionsExt;
-
     let scratch = tempfile::tempdir().unwrap();
     let archive = scratch.path().join("toolchain.tar.gz");
     write_tar_gz(&archive, "toolchain-1.2.3");
@@ -195,8 +195,6 @@ async fn a_zip_restores_the_mode_bits_it_carries() {
     evaluate_log_fields();
     // Windows archives are zips, and an interpreter that arrives without its
     // execute bit installs cleanly and then cannot be run.
-    use std::os::unix::fs::PermissionsExt;
-
     let scratch = tempfile::tempdir().unwrap();
     let archive = scratch.path().join("toolchain.zip");
     fs::write(

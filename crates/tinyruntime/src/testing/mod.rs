@@ -5,6 +5,7 @@
 //! handing over one complete buffer would not exercise that. And real archives,
 //! because the extractor's job is to be correct about formats that only a real
 //! encoder produces.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;

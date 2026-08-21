@@ -15,6 +15,7 @@
 //! # Driving a scenario
 //!
 //! A job's `code` is a directive rather than source. See [`Directive`].
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;

@@ -339,7 +339,7 @@ async fn a_managed_toolchain_is_downloaded_verified_unpacked_and_promoted() {
     let provider = installing_provider(&url, Some(&digest));
     let resolver = resolver_over(Arc::clone(&provider) as Arc<dyn Provider>);
 
-    let resolved = resolver
+    let installed = resolver
         .require(&ResolveRequest::new(
             Language::nodejs(),
             settings(scratch.path()),
@@ -347,10 +347,10 @@ async fn a_managed_toolchain_is_downloaded_verified_unpacked_and_promoted() {
         .await
         .expect("the toolchain installs");
 
-    assert_eq!(resolved.source, RuntimeSource::Managed);
+    assert_eq!(installed.source, RuntimeSource::Managed);
     let install_dir = scratch.path().join("toolchain-1.0.0");
     assert_eq!(
-        resolved.install_dir.as_deref(),
+        installed.install_dir.as_deref(),
         Some(install_dir.to_string_lossy().as_ref())
     );
     assert!(
