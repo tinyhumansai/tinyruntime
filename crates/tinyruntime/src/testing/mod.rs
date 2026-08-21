@@ -63,8 +63,7 @@ pub(crate) fn serve(body: Vec<u8>, requests: usize) -> (String, JoinHandle<usize
 pub(crate) fn single_root_archive(root: &str, format: ArchiveFormat) -> Vec<u8> {
     match format {
         ArchiveFormat::TarGz => {
-            let encoder =
-                flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+            let encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
             tar_into(encoder, root).finish().expect("gzip finishes")
         }
         ArchiveFormat::TarXz => {
@@ -100,10 +99,7 @@ fn zip_archive(root: &str) -> Vec<u8> {
         )
         .expect("the entry starts");
     writer.write_all(b"#!/bin/sh\n").expect("the entry writes");
-    writer
-        .finish()
-        .expect("the zip finishes")
-        .into_inner()
+    writer.finish().expect("the zip finishes").into_inner()
 }
 
 /// The lowercase hex SHA-256 of `bytes`.

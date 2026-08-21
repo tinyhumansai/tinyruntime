@@ -222,7 +222,11 @@ async fn a_second_job_reuses_the_pool_the_first_one_built() {
     engine.execute(&request).await.expect("the second job runs");
 
     let stats = engine.pool_stats().await;
-    assert_eq!(stats.len(), 1, "a second pool was built for the same launch");
+    assert_eq!(
+        stats.len(),
+        1,
+        "a second pool was built for the same launch"
+    );
     assert_eq!(stats[0].jobs_total, 2);
     assert_eq!(
         stats[0].worker_spawns, 1,

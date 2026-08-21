@@ -183,7 +183,10 @@ async fn unpacks_an_xz_tarball() {
     .expect("the xz tarball unpacks");
 
     assert_eq!(root.file_name().unwrap(), "toolchain-1.2.3");
-    assert_eq!(fs::read_to_string(root.join("bin/tool")).unwrap(), "#!/bin/sh\n");
+    assert_eq!(
+        fs::read_to_string(root.join("bin/tool")).unwrap(),
+        "#!/bin/sh\n"
+    );
 }
 
 #[cfg(unix)]
@@ -211,8 +214,14 @@ async fn a_zip_restores_the_mode_bits_it_carries() {
     .await
     .expect("the zip unpacks");
 
-    let mode = fs::metadata(root.join("bin/tool")).unwrap().permissions().mode();
-    assert!(mode & 0o111 != 0, "extracted tool is not executable: {mode:o}");
+    let mode = fs::metadata(root.join("bin/tool"))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert!(
+        mode & 0o111 != 0,
+        "extracted tool is not executable: {mode:o}"
+    );
 }
 
 #[tokio::test]
@@ -303,7 +312,9 @@ async fn a_zip_entry_whose_path_escapes_the_staging_directory_is_skipped() {
     let archive = scratch.path().join("hostile.zip");
     let mut writer = zip::ZipWriter::new(fs::File::create(&archive).unwrap());
     let options = zip::write::SimpleFileOptions::default();
-    writer.add_directory("toolchain-1.0.0/bin", options).unwrap();
+    writer
+        .add_directory("toolchain-1.0.0/bin", options)
+        .unwrap();
     writer
         .start_file("toolchain-1.0.0/bin/tool", options)
         .unwrap();
@@ -317,7 +328,10 @@ async fn a_zip_entry_whose_path_escapes_the_staging_directory_is_skipped() {
         .await
         .expect("the safe entries still unpack");
 
-    assert!(root.join("bin/tool").is_file(), "the legitimate entry was lost");
+    assert!(
+        root.join("bin/tool").is_file(),
+        "the legitimate entry was lost"
+    );
     assert!(
         !scratch.path().join("escaped").exists(),
         "an entry escaped the staging directory"

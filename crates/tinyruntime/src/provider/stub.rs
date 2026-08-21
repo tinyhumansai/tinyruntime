@@ -129,7 +129,11 @@ impl Provider for StubProvider {
         install_dir: &str,
         _settings: &RuntimeSettings,
     ) -> Result<Option<RuntimeLayout>> {
-        if let Some(marker) = self.layout_marker.lock().expect("uncontended in tests").as_ref()
+        if let Some(marker) = self
+            .layout_marker
+            .lock()
+            .expect("uncontended in tests")
+            .as_ref()
             && !std::path::Path::new(install_dir).join(marker).exists()
         {
             return Ok(None);

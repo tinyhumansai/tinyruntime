@@ -210,9 +210,8 @@ async fn the_headers_a_channel_requires_are_sent() {
             headers.push_str(&line);
             line.clear();
         }
-        let _ = stream.write_all(
-            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
-        );
+        let _ = stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
         let _ = stream.flush();
         headers
     });

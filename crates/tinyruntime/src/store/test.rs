@@ -179,7 +179,10 @@ fn a_path_that_is_not_there_is_not_inside_anything() {
     // Answering "yes" would let the reuse scan trust a directory that vanished.
     let root = tempfile::tempdir().unwrap();
     assert!(!is_inside(root.path(), &root.path().join("absent")));
-    assert!(!is_inside(std::path::Path::new("/absent-root"), root.path()));
+    assert!(!is_inside(
+        std::path::Path::new("/absent-root"),
+        root.path()
+    ));
 }
 
 #[test]
@@ -198,7 +201,9 @@ async fn ensuring_a_root_creates_every_missing_level() {
     ensure_root(&nested).await.expect("the root is created");
     assert!(nested.is_dir());
     // Idempotent: an existing root is not an error.
-    ensure_root(&nested).await.expect("an existing root is fine");
+    ensure_root(&nested)
+        .await
+        .expect("an existing root is fine");
 }
 
 #[tokio::test]
@@ -242,13 +247,15 @@ async fn a_second_holder_waits_for_the_first_to_release() {
         .expect("the first holder takes it");
 
     let contender = install_dir.clone();
-    let waiting = tokio::spawn(async move {
-        InstallLock::acquire(&contender, &Language::nodejs()).await
-    });
+    let waiting =
+        tokio::spawn(async move { InstallLock::acquire(&contender, &Language::nodejs()).await });
 
     // The second acquire must still be blocked while the first is held.
     tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-    assert!(!waiting.is_finished(), "the lock did not exclude a second holder");
+    assert!(
+        !waiting.is_finished(),
+        "the lock did not exclude a second holder"
+    );
 
     drop(held);
     let second = tokio::time::timeout(std::time::Duration::from_secs(5), waiting)

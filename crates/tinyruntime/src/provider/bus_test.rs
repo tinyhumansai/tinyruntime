@@ -42,10 +42,7 @@ impl Served {
         .await
     }
 
-    async fn select_distribution(
-        &self,
-        _settings: RuntimeSettings,
-    ) -> TinyBusResult<Distribution> {
+    async fn select_distribution(&self, _settings: RuntimeSettings) -> TinyBusResult<Distribution> {
         std::future::ready(Ok(Distribution::new(
             "1.0.0",
             "t.tar.gz",
@@ -79,15 +76,15 @@ async fn routed() -> TinyBusResult<(Connection, BusProvider)> {
     Broker::new().spawn(bus.clone());
 
     let peer = Connection::connect(bus.connect().await?).await?;
-    peer.serve_at(names::object_path_for(BUS_NAME).as_str().try_into()?, Served)
-        .await?;
+    peer.serve_at(
+        names::object_path_for(BUS_NAME).as_str().try_into()?,
+        Served,
+    )
+    .await?;
     peer.request_name(BUS_NAME).await?;
 
     let client = Connection::connect(bus.connect().await?).await?;
-    Ok((
-        peer,
-        BusProvider::new(client, Language::nodejs(), BUS_NAME),
-    ))
+    Ok((peer, BusProvider::new(client, Language::nodejs(), BUS_NAME)))
 }
 
 /// A client routed at a name nobody owns.
@@ -138,8 +135,7 @@ async fn every_member_reaches_the_provider() -> TinyBusResult<()> {
 }
 
 #[tokio::test]
-async fn a_name_nobody_owns_is_reported_as_the_provider_being_unavailable()
--> TinyBusResult<()> {
+async fn a_name_nobody_owns_is_reported_as_the_provider_being_unavailable() -> TinyBusResult<()> {
     // Not as a transport error: a host reading this wants to know Python is not
     // serving, not how tinybus renders a name it never chose.
     let provider = unrouted().await?;
@@ -165,14 +161,17 @@ async fn a_name_nobody_owns_is_reported_as_the_provider_being_unavailable()
             matches!(error, Error::ProviderUnavailable { .. }),
             "got {error:?}"
         );
-        assert!(error.is_retryable(), "the module may simply not be loaded yet");
+        assert!(
+            error.is_retryable(),
+            "the module may simply not be loaded yet"
+        );
     }
     Ok(())
 }
 
 #[tokio::test]
-async fn a_bus_provider_describes_where_it_routes_rather_than_its_connection()
--> TinyBusResult<()> {
+async fn a_bus_provider_describes_where_it_routes_rather_than_its_connection() -> TinyBusResult<()>
+{
     let (_peer, provider) = routed().await?;
     let rendered = format!("{provider:?}");
     assert!(rendered.contains("nodejs"), "got {rendered}");
@@ -181,8 +180,7 @@ async fn a_bus_provider_describes_where_it_routes_rather_than_its_connection()
 }
 
 #[tokio::test]
-async fn a_provider_is_addressed_at_the_path_derived_from_its_bus_name()
--> TinyBusResult<()> {
+async fn a_provider_is_addressed_at_the_path_derived_from_its_bus_name() -> TinyBusResult<()> {
     // Serving at any other path would make the module unroutable, because
     // `tinybus_module!` derives the manifest path from the bus name.
     let bus = MemoryBus::new();

@@ -85,10 +85,8 @@ fn stats_start_at_zero_and_record_what_a_pool_served() {
 
 #[test]
 fn a_stats_reply_carries_the_pools_it_was_built_from() {
-    let response = super::PoolStatsResponse::new(vec![super::PoolStats::new(
-        crate::Language::python(),
-        2,
-    )]);
+    let response =
+        super::PoolStatsResponse::new(vec![super::PoolStats::new(crate::Language::python(), 2)]);
     assert_eq!(response.pools.len(), 1);
     assert_eq!(response.pools[0].language, crate::Language::python());
 }

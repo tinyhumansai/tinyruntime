@@ -426,8 +426,7 @@ async fn a_host_runs_code_through_the_router_over_the_bus() -> TinyBusResult<()>
 }
 
 #[tokio::test]
-async fn a_job_for_a_language_with_no_provider_fails_with_a_readable_reason()
--> TinyBusResult<()> {
+async fn a_job_for_a_language_with_no_provider_fails_with_a_readable_reason() -> TinyBusResult<()> {
     let bus = bus();
     let scratch = tempfile::tempdir().expect("scratch directory");
     let module = Connection::connect(bus.connect().await?).await?;

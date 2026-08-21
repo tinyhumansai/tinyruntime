@@ -259,7 +259,10 @@ async fn a_wedged_worker_is_abandoned_at_the_hard_deadline() {
 
     assert!(matches!(error, Error::PostDispatch { .. }), "got {error:?}");
     let stats = pool.stats().await;
-    assert_eq!(stats.idle_workers, 0, "a wedged worker was parked for reuse");
+    assert_eq!(
+        stats.idle_workers, 0,
+        "a wedged worker was parked for reuse"
+    );
 }
 
 #[tokio::test]
@@ -325,8 +328,12 @@ async fn a_pool_with_no_queue_sheds_a_second_concurrent_job() {
 
     let busy = std::sync::Arc::clone(&pool);
     let occupied = tokio::spawn(async move {
-        busy.run(Directive::Hang.code(), None, Some(Duration::from_millis(400)))
-            .await
+        busy.run(
+            Directive::Hang.code(),
+            None,
+            Some(Duration::from_millis(400)),
+        )
+        .await
     });
     // Let the first job take the only slot.
     tokio::time::sleep(Duration::from_millis(300)).await;
@@ -438,7 +445,11 @@ async fn the_reaper_retires_idle_workers_and_stops_when_the_pool_is_dropped() {
     run(&pool, &Directive::Echo("x"), None)
         .await
         .expect("the job runs");
-    assert_eq!(pool.stats().await.idle_workers, 1, "the worker was not parked");
+    assert_eq!(
+        pool.stats().await.idle_workers,
+        1,
+        "the worker was not parked"
+    );
 
     // A fresh worker is not yet expired, so the reaper keeps it.
     pool.reap().await;
@@ -446,7 +457,11 @@ async fn the_reaper_retires_idle_workers_and_stops_when_the_pool_is_dropped() {
 
     tokio::time::sleep(Duration::from_millis(1_200)).await;
     pool.reap().await;
-    assert_eq!(pool.stats().await.idle_workers, 0, "an expired worker was kept");
+    assert_eq!(
+        pool.stats().await.idle_workers,
+        0,
+        "an expired worker was kept"
+    );
 
     // Run the loop at a pace a test can observe, then drop the pool: the reaper
     // holds only a weak reference, so it must stop rather than keep it alive.

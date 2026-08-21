@@ -377,10 +377,13 @@ async fn a_second_resolution_reuses_the_install_rather_than_downloading_again() 
     let request = ResolveRequest::new(Language::nodejs(), settings(scratch.path()));
 
     // A fresh resolver each time, so the in-process memo cannot be what answers.
-    Resolver::new(registry_for(Arc::clone(&provider) as Arc<dyn Provider>), reqwest::Client::new())
-        .require(&request)
-        .await
-        .expect("the first resolution installs");
+    Resolver::new(
+        registry_for(Arc::clone(&provider) as Arc<dyn Provider>),
+        reqwest::Client::new(),
+    )
+    .require(&request)
+    .await
+    .expect("the first resolution installs");
 
     let reused = Resolver::new(
         registry_for(Arc::clone(&provider) as Arc<dyn Provider>),
@@ -413,8 +416,14 @@ async fn an_archive_that_fails_verification_is_not_installed() {
         .await
         .expect_err("a mismatched archive is refused");
 
-    assert!(matches!(error, Error::DigestMismatch { .. }), "got {error:?}");
-    assert!(!error.is_retryable(), "retrying produces the same wrong bytes");
+    assert!(
+        matches!(error, Error::DigestMismatch { .. }),
+        "got {error:?}"
+    );
+    assert!(
+        !error.is_retryable(),
+        "retrying produces the same wrong bytes"
+    );
     assert!(
         !scratch.path().join("toolchain-1.0.0").exists(),
         "a refused archive was installed anyway"
@@ -432,10 +441,17 @@ async fn an_install_the_provider_cannot_find_a_toolchain_in_is_reported_as_empty
     let (url, server) = testing::serve(archive, 1);
 
     // No layout: the provider never recognises what was installed.
-    let provider = Arc::new(StubProvider::new(Language::nodejs()).with_distribution(
-        Distribution::new("1.0.0", "toolchain-1.0.0.tar.gz", &url, ArchiveFormat::TarGz)
+    let provider = Arc::new(
+        StubProvider::new(Language::nodejs()).with_distribution(
+            Distribution::new(
+                "1.0.0",
+                "toolchain-1.0.0.tar.gz",
+                &url,
+                ArchiveFormat::TarGz,
+            )
             .with_sha256(digest),
-    ));
+        ),
+    );
     let resolver = resolver_over(provider);
 
     let error = resolver
@@ -504,9 +520,8 @@ async fn a_cache_root_that_cannot_be_listed_is_treated_as_empty() {
     settings.prefer_system = false;
     settings.cache_dir = not_a_directory.to_string_lossy().into_owned();
 
-    let provider = Arc::new(
-        StubProvider::new(Language::nodejs()).with_layout(layout("1.0.0", "/wherever")),
-    );
+    let provider =
+        Arc::new(StubProvider::new(Language::nodejs()).with_layout(layout("1.0.0", "/wherever")));
     let found = resolver_over(provider)
         .resolve(&ResolveRequest::probe(Language::nodejs(), settings))
         .await
