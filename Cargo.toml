@@ -22,7 +22,7 @@ version = "0.2.1"
 edition = "2024"
 rust-version = "1.88"
 license = "GPL-3.0-only"
-repository = "https://github.com/tinyhumansai/rust-template"
+repository = "https://github.com/tinyhumansai/tinyruntime"
 
 [workspace.dependencies]
 # The wire contract. `crates/template` depends on it and re-exports it, so a
@@ -30,7 +30,7 @@ repository = "https://github.com/tinyhumansai/rust-template"
 # No `version` requirement on purpose: the workspace version moves on every
 # release, and a pinned requirement here would stop resolving the moment it did.
 # Nothing in this workspace is published, so the path is the whole address.
-template-bus = { path = "crates/template-bus" }
+tinyruntime-bus = { path = "crates/tinyruntime-bus" }
 # TinyBus defines the message types, interface macro, and frozen module ABI
 # used by the generated integration. Socket and CLI features are unnecessary
 # here.

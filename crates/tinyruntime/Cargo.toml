@@ -1,5 +1,5 @@
 [package]
-name = "template"
+name = "tinyruntime"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -22,7 +22,7 @@ crate-type = ["rlib", "cdylib"]
 # Re-exported wholesale from `src/lib.rs` so a consumer takes one dependency
 # rather than two, and so `template::GreetRequest` and
 # `template_bus::GreetRequest` are the same type.
-template-bus = { workspace = true }
+tinyruntime-bus = { workspace = true }
 tinybus = { workspace = true }
 tinybus-module = { workspace = true }
 thiserror = { workspace = true }
