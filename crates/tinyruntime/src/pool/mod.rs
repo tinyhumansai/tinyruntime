@@ -31,7 +31,7 @@ use tinyruntime_bus::{Language, PoolSettings, PoolStats};
 pub mod env;
 #[cfg(test)]
 pub(crate) mod fake_worker;
-mod lang_pool;
+pub(crate) mod lang_pool;
 pub mod protocol;
 pub mod worker;
 

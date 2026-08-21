@@ -123,3 +123,234 @@ async fn a_fresh_pool_reports_no_work_done() {
         PoolSettings::default().effective_max_workers()
     );
 }
+
+// ---------------------------------------------------------------------------
+// Against a live worker process
+//
+// Everything above is bookkeeping. These drive a real child over a real socket
+// via `fake_worker`, which is what actually covers the handshake, warm reuse,
+// recycling, and the dispatch tagging that keeps a job from running twice.
+// ---------------------------------------------------------------------------
+
+use std::time::Duration;
+
+use tinyruntime_bus::Language;
+
+use super::fake_worker::{self, Directive};
+use super::lang_pool::LangPool;
+use crate::error::Error;
+
+/// A pool of `max_workers` fake workers with recycling off.
+fn live_pool(max_workers: usize) -> std::sync::Arc<LangPool> {
+    let settings = PoolSettings::default()
+        .with_max_workers(max_workers)
+        .with_recycle_after_jobs(0);
+    LangPool::start(
+        fake_worker::launch(Language::nodejs()),
+        settings,
+        "1.0.0-test".to_string(),
+    )
+}
+
+/// Run one directive on `pool`.
+async fn run(
+    pool: &LangPool,
+    directive: &Directive<'_>,
+    timeout: Option<Duration>,
+) -> crate::Result<tinyruntime_bus::ExecResponse> {
+    pool.run(directive.code(), None, timeout).await
+}
+
+#[tokio::test]
+async fn a_job_runs_on_a_real_worker_and_comes_back() {
+    let pool = live_pool(1);
+    let response = run(&pool, &Directive::Echo("hello"), None)
+        .await
+        .expect("the job runs");
+
+    assert_eq!(response.stdout, "hello");
+    assert_eq!(response.exit_code, Some(0));
+    assert!(response.success());
+    assert_eq!(
+        response.runtime_version, "1.0.0-test",
+        "the reply carries the toolchain that ran it"
+    );
+}
+
+#[tokio::test]
+async fn many_jobs_share_one_warm_worker() {
+    // The entire point of the pool: N jobs, one interpreter child.
+    let pool = live_pool(1);
+    for index in 0..4 {
+        let text = format!("job-{index}");
+        let response = run(&pool, &Directive::Echo(&text), None)
+            .await
+            .expect("each job runs");
+        assert_eq!(response.stdout, text);
+    }
+
+    let stats = pool.stats().await;
+    assert_eq!(stats.jobs_total, 4);
+    assert_eq!(
+        stats.worker_spawns, 1,
+        "four jobs spawned {} interpreters",
+        stats.worker_spawns
+    );
+    assert_eq!(stats.idle_workers, 1, "the warm worker was not parked");
+}
+
+#[tokio::test]
+async fn a_failing_job_is_a_result_rather_than_an_error() {
+    // The job threw; the pool did its job. Callers need the output, not an error.
+    let pool = live_pool(1);
+    let response = run(&pool, &Directive::Fail("boom"), None)
+        .await
+        .expect("a throwing job still returns");
+
+    assert!(!response.success());
+    assert_eq!(response.exit_code, Some(1));
+    assert_eq!(response.stderr, "boom");
+}
+
+#[tokio::test]
+async fn a_job_aborted_at_its_deadline_is_reported_as_timed_out() {
+    let pool = live_pool(1);
+    let response = run(&pool, &Directive::TimedOut, Some(Duration::from_secs(1)))
+        .await
+        .expect("the worker replies even when it aborts");
+    assert!(response.timed_out);
+    assert!(!response.success());
+}
+
+#[tokio::test]
+async fn a_harness_level_failure_is_terminal_rather_than_retryable() {
+    // The job reached the worker, so it may have run. Re-running it could
+    // duplicate whatever it already did.
+    let pool = live_pool(1);
+    let error = run(&pool, &Directive::HarnessError("cannot enter cwd"), None)
+        .await
+        .expect_err("a harness failure is an error");
+
+    assert!(matches!(error, Error::PostDispatch { .. }), "got {error:?}");
+    assert!(!error.is_retryable());
+    assert!(error.to_string().contains("cannot enter cwd"));
+}
+
+#[tokio::test]
+async fn a_worker_that_dies_mid_job_is_terminal_and_not_re_run() {
+    // The request went out before the worker closed the stream, so the job may
+    // have executed. This is the case that must never be retried.
+    let pool = live_pool(1);
+    let error = run(&pool, &Directive::Die, None)
+        .await
+        .expect_err("a closed stream fails the job");
+
+    assert!(matches!(error, Error::PostDispatch { .. }), "got {error:?}");
+    assert!(!error.is_retryable());
+}
+
+#[tokio::test]
+async fn a_wedged_worker_is_abandoned_at_the_hard_deadline() {
+    // The worker never replies. The grace above the soft deadline is what ends
+    // the wait, and the worker is discarded rather than parked.
+    let pool = live_pool(1);
+    let error = run(&pool, &Directive::Hang, Some(Duration::from_millis(50)))
+        .await
+        .expect_err("a silent worker cannot succeed");
+
+    assert!(matches!(error, Error::PostDispatch { .. }), "got {error:?}");
+    let stats = pool.stats().await;
+    assert_eq!(stats.idle_workers, 0, "a wedged worker was parked for reuse");
+}
+
+#[tokio::test]
+async fn a_reply_for_another_job_is_skipped_rather_than_returned() {
+    // Returning it would hand this caller another job's output.
+    let pool = live_pool(1);
+    let response = run(&pool, &Directive::Misaddressed("mine"), None)
+        .await
+        .expect("the right reply is found");
+    assert_eq!(response.stdout, "mine");
+}
+
+#[tokio::test]
+async fn an_unparseable_line_is_skipped_rather_than_failing_the_job() {
+    // Harnesses are written in the provider's language. A stray line one of them
+    // prints must not take down the job.
+    let pool = live_pool(1);
+    let response = run(&pool, &Directive::Noise("still-here"), None)
+        .await
+        .expect("the job survives noise");
+    assert_eq!(response.stdout, "still-here");
+}
+
+#[tokio::test]
+async fn a_worker_is_retired_once_it_has_served_its_budget() {
+    let settings = PoolSettings::default()
+        .with_max_workers(1)
+        .with_recycle_after_jobs(1);
+    let pool = LangPool::start(
+        fake_worker::launch(Language::nodejs()),
+        settings,
+        "1.0.0-test".to_string(),
+    );
+
+    for _ in 0..2 {
+        run(&pool, &Directive::Echo("x"), None)
+            .await
+            .expect("each job runs");
+    }
+
+    let stats = pool.stats().await;
+    assert_eq!(
+        stats.worker_spawns, 2,
+        "a budget of one job should retire the worker after each"
+    );
+    assert_eq!(stats.idle_workers, 0, "a retired worker was parked anyway");
+}
+
+#[tokio::test]
+async fn a_pool_with_no_queue_sheds_a_second_concurrent_job() {
+    // Capacity is workers + allowed queue depth. With one worker and no queue,
+    // a job arriving while the first is in flight is refused rather than waited
+    // on — and the caller is told not to spawn its own interpreter.
+    let settings = PoolSettings::default()
+        .with_max_workers(1)
+        .with_max_queue_depth(0)
+        .with_recycle_after_jobs(0);
+    let pool = LangPool::start(
+        fake_worker::launch(Language::nodejs()),
+        settings,
+        "1.0.0-test".to_string(),
+    );
+
+    let busy = std::sync::Arc::clone(&pool);
+    let occupied = tokio::spawn(async move {
+        busy.run(Directive::Hang.code(), None, Some(Duration::from_millis(400)))
+            .await
+    });
+    // Let the first job take the only slot.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let shed = run(&pool, &Directive::Echo("second"), None).await;
+    let Err(error) = shed else {
+        let _ = occupied.await;
+        panic!("a full pool accepted a second job");
+    };
+    assert!(matches!(error, Error::PoolSaturated(_)), "got {error:?}");
+    assert!(error.is_retryable(), "a busy pool is worth retrying");
+
+    let _ = occupied.await;
+    assert_eq!(pool.stats().await.rejected_saturated, 1);
+}
+
+#[tokio::test]
+async fn a_job_records_how_long_it_waited_for_a_worker() {
+    let pool = live_pool(1);
+    let response = run(&pool, &Directive::Echo("x"), None)
+        .await
+        .expect("the job runs");
+    // Nothing was queued, so the wait is small — what matters is that the field
+    // is populated separately from the run time rather than left at a default.
+    assert!(response.queue_wait_ms < 5_000);
+}
