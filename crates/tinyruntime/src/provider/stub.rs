@@ -25,6 +25,13 @@ pub(crate) struct StubProvider {
     system: Mutex<Option<RuntimeLayout>>,
     distribution: Mutex<Option<Distribution>>,
     layout: Mutex<Option<RuntimeLayout>>,
+    /// A path, relative to an install directory, that must exist before
+    /// `layout` reports anything.
+    ///
+    /// Without this the stub calls every directory a toolchain, including one
+    /// the router has not installed into yet — which silently turns an install
+    /// test into a no-op.
+    layout_marker: Mutex<Option<String>>,
     harness: Mutex<Option<WorkerHarness>>,
     /// How many times a distribution was selected, which is how a test sees
     /// whether the reuse path avoided a download.
@@ -44,6 +51,7 @@ impl StubProvider {
             system: Mutex::new(None),
             distribution: Mutex::new(None),
             layout: Mutex::new(None),
+            layout_marker: Mutex::new(None),
             harness: Mutex::new(None),
             selections: AtomicUsize::new(0),
             detections: AtomicUsize::new(0),
@@ -66,6 +74,17 @@ impl StubProvider {
     pub(crate) fn with_layout(self, layout: RuntimeLayout) -> Self {
         *self.layout.lock().expect("uncontended in tests") = Some(layout);
         self
+    }
+
+    /// Report `layout`, but only for a directory that actually contains
+    /// `marker` — which is what a real provider does.
+    pub(crate) fn with_layout_when_present(
+        self,
+        marker: impl Into<String>,
+        layout: RuntimeLayout,
+    ) -> Self {
+        *self.layout_marker.lock().expect("uncontended in tests") = Some(marker.into());
+        self.with_layout(layout)
     }
 
     /// Supply `harness` when the router asks how to launch a worker.
@@ -107,9 +126,14 @@ impl Provider for StubProvider {
 
     async fn layout(
         &self,
-        _install_dir: &str,
+        install_dir: &str,
         _settings: &RuntimeSettings,
     ) -> Result<Option<RuntimeLayout>> {
+        if let Some(marker) = self.layout_marker.lock().expect("uncontended in tests").as_ref()
+            && !std::path::Path::new(install_dir).join(marker).exists()
+        {
+            return Ok(None);
+        }
         Ok(self.layout.lock().expect("uncontended in tests").clone())
     }
 

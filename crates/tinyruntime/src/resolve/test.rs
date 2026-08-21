@@ -322,7 +322,9 @@ fn installing_provider(url: &str, digest: Option<&str>) -> Arc<StubProvider> {
     Arc::new(
         StubProvider::new(Language::nodejs())
             .with_distribution(distribution)
-            .with_layout(layout("1.0.0", "/installed")),
+            // Only a directory that actually holds the unpacked tree counts, so
+            // an install test cannot silently short-circuit into "already there".
+            .with_layout_when_present("bin/tool", layout("1.0.0", "/installed")),
     )
 }
 
