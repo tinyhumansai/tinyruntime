@@ -384,6 +384,15 @@ async fn a_host_runs_code_through_the_router_over_the_bus() -> TinyBusResult<()>
         crate::pool::fake_worker::Directive::Echo("over-the-bus").code(),
     );
 
+    // Diagnostic: confirm what the router resolved before it tried to launch.
+    let resolved: ResolveResponse = proxy
+        .call(
+            names::methods::RESOLVE,
+            (ResolveRequest::probe(Language::nodejs(), request.settings.clone()),),
+        )
+        .await?;
+    eprintln!("RESOLVED = {:?}", resolved.runtime);
+
     let reply: ExecResponse = proxy.call(names::methods::EXECUTE, (request,)).await?;
     assert_eq!(reply.stdout, "over-the-bus");
     assert!(reply.success());
