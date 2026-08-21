@@ -13,9 +13,16 @@
 //! is a consumer of the second exactly as a host is a consumer of the first, and
 //! splitting them would let the halves drift.
 //!
-//! Every provider serves [`PROVIDER_INTERFACE`] at [`PROVIDER_OBJECT_PATH`] —
-//! that is what makes them interchangeable — and claims its own well-known bus
-//! name, because two peers cannot hold the same one. See [`providers`].
+//! Every provider implements [`PROVIDER_INTERFACE`] — that is what makes them
+//! interchangeable — and claims its own well-known bus name, because two peers
+//! cannot hold the same one.
+//!
+//! Each provider therefore serves at its *own* object path, derived from that
+//! bus name. That is not a choice: `tinybus_module!` builds a module's manifest
+//! object path by replacing the dots in its bus name with slashes, and a module
+//! that served somewhere else would ship a manifest that disagreed with the
+//! object it actually exports. [`object_path_for`] applies the same derivation,
+//! so the router can address a provider it was only told the bus name of.
 
 /// The well-known interface name the router claims on the bus.
 pub const INTERFACE: &str = "ai.tinyhumans.runtime.Runtime";
@@ -26,8 +33,25 @@ pub const OBJECT_PATH: &str = "/ai/tinyhumans/runtime/Runtime";
 /// The interface every language provider implements.
 pub const PROVIDER_INTERFACE: &str = "ai.tinyhumans.runtime.Provider";
 
-/// The object path every language provider serves its interface at.
-pub const PROVIDER_OBJECT_PATH: &str = "/ai/tinyhumans/runtime/Provider";
+/// The object path a module claiming `bus_name` serves its interfaces at.
+///
+/// The same derivation `tinybus_module!` uses to build a module's manifest, so
+/// what this returns is where that module's object actually is.
+///
+/// # Examples
+///
+/// ```
+/// # use tinyruntime_bus::names;
+/// assert_eq!(
+///     names::object_path_for(names::providers::NODEJS),
+///     names::providers::NODEJS_OBJECT_PATH,
+/// );
+/// assert_eq!(names::object_path_for(names::INTERFACE), names::OBJECT_PATH);
+/// ```
+#[must_use]
+pub fn object_path_for(bus_name: &str) -> String {
+    format!("/{}", bus_name.replace('.', "/"))
+}
 
 /// One constant per member of [`INTERFACE`].
 pub mod methods {
@@ -92,8 +116,14 @@ pub mod providers {
     /// The bus name the Node.js provider claims.
     pub const NODEJS: &str = "ai.tinyhumans.runtime.nodejs.Provider";
 
+    /// The object path the Node.js provider serves at.
+    pub const NODEJS_OBJECT_PATH: &str = "/ai/tinyhumans/runtime/nodejs/Provider";
+
     /// The bus name the Python provider claims.
     pub const PYTHON: &str = "ai.tinyhumans.runtime.python.Provider";
+
+    /// The object path the Python provider serves at.
+    pub const PYTHON_OBJECT_PATH: &str = "/ai/tinyhumans/runtime/python/Provider";
 }
 
 /// Every member of [`INTERFACE`], in the order the interface dispatches them.

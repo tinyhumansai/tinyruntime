@@ -1,16 +1,37 @@
 //! Unit tests for the bus identity constants.
 
 use super::{
-    INTERFACE, METHODS, OBJECT_PATH, PROVIDER_INTERFACE, PROVIDER_METHODS, PROVIDER_OBJECT_PATH,
-    methods, provider_methods, providers,
+    INTERFACE, METHODS, OBJECT_PATH, PROVIDER_INTERFACE, PROVIDER_METHODS, methods,
+    object_path_for, provider_methods, providers,
 };
 
 #[test]
-fn the_object_paths_are_the_interfaces_in_path_form() {
-    assert_eq!(OBJECT_PATH, format!("/{}", INTERFACE.replace('.', "/")));
+fn the_routers_object_path_is_its_bus_name_in_path_form() {
+    assert_eq!(OBJECT_PATH, object_path_for(INTERFACE));
+}
+
+#[test]
+fn each_providers_object_path_is_derived_from_its_own_bus_name() {
+    // Not from the shared interface. `tinybus_module!` builds a module's
+    // manifest path from its bus name, so a provider that served at a shared
+    // path would ship a manifest disagreeing with the object it exports.
     assert_eq!(
-        PROVIDER_OBJECT_PATH,
-        format!("/{}", PROVIDER_INTERFACE.replace('.', "/"))
+        providers::NODEJS_OBJECT_PATH,
+        object_path_for(providers::NODEJS)
+    );
+    assert_eq!(
+        providers::PYTHON_OBJECT_PATH,
+        object_path_for(providers::PYTHON)
+    );
+    assert_ne!(
+        providers::NODEJS_OBJECT_PATH,
+        providers::PYTHON_OBJECT_PATH,
+        "two providers cannot share one object path"
+    );
+    assert_ne!(
+        providers::NODEJS_OBJECT_PATH,
+        object_path_for(PROVIDER_INTERFACE),
+        "a provider must not serve at the shared interface's path"
     );
 }
 
