@@ -308,3 +308,41 @@ fn an_explicit_directory_wins_over_the_platform_cache() {
     );
     assert_eq!(root, std::path::Path::new("/opt/runtimes"));
 }
+
+#[tokio::test]
+async fn a_lock_file_that_is_a_directory_reports_why_it_could_not_be_opened() {
+    // The lock lives beside the install directory. If something already occupies
+    // that name as a directory, opening it fails — and the reason should name
+    // the lock rather than surfacing a bare errno.
+    evaluate_log_fields();
+    let root = tempfile::tempdir().unwrap();
+    let install_dir = root.path().join("toolchain-1.0.0");
+    fs::create_dir_all(install_dir.with_extension("lock")).unwrap();
+
+    let error = InstallLock::acquire(&install_dir, &Language::nodejs())
+        .await
+        .expect_err("a directory cannot be opened as a lock file");
+    let Error::Install { reason, .. } = &error else {
+        panic!("got {error:?}");
+    };
+    assert!(reason.contains("install lock"), "got `{reason}`");
+}
+
+#[tokio::test]
+async fn promoting_under_a_parent_that_is_a_file_reports_why() {
+    evaluate_log_fields();
+    let scratch = tempfile::tempdir().unwrap();
+    let staged = scratch.path().join("staged");
+    fs::create_dir_all(&staged).unwrap();
+
+    let blocker = scratch.path().join("not-a-directory");
+    fs::write(&blocker, b"x").unwrap();
+
+    let error = promote(&staged, &blocker.join("toolchain"), &Language::nodejs())
+        .await
+        .expect_err("a file cannot contain the cache root");
+    let Error::Install { reason, .. } = &error else {
+        panic!("got {error:?}");
+    };
+    assert!(reason.contains("cache root"), "got `{reason}`");
+}
