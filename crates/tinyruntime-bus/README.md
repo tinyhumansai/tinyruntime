@@ -1,100 +1,65 @@
-# template-bus
+# tinyruntime-bus
 
-Every type that crosses the template module's `TinyBus` boundary, and the names
-of the members that carry them.
+Every type that crosses the tinyruntime boundary, and the names of the members
+that carry them.
 
-The template ships as a loadable module so a host does not compile the
-implementation: `crates/template` is built as a `cdylib` and exports one object.
-A host can load that binary but cannot `use` anything out of it, so the payload
-vocabulary has to be published as an ordinary library. This is it.
-
-| module     | what it holds                                                |
-| ---------- | ------------------------------------------------------------ |
-| `names`    | interface name, object path, one constant per member          |
-| `greeting` | the value vocabulary: the `Greet` request and response        |
-| `version`  | `CONTRACT_VERSION` and the bind rule a host applies to it     |
+`tinyruntime` ships as a loadable module so a host does not compile the
+implementation: `crates/tinyruntime` is built as a `cdylib` and exports one
+object. A host can load that binary but cannot `use` anything out of it, so the
+payload vocabulary has to be published as an ordinary library. This is it.
 
 Two dependencies, both pure Rust: `serde` and `serde_json`.
 
-## This crate sits underneath `template`
+## Two interfaces, one contract
 
-`template` **depends on this crate and re-exports all of it**. That direction
-matters, and it is the opposite of the obvious one.
+This crate defines both halves of the system, because they are two views of one
+agreement and splitting them would let the halves drift.
 
-A *host* needs the payload types and needs nothing else: it loads the module and
-makes calls, so it names `GreetRequest` and `GreetResponse` but implements no
-behavior and links no transport. Making it depend on the whole module crate — and
-through it on `tinybus`, `tokio`, and the module SDK — to spell a payload type
-would be the wrong shape.
+`INTERFACE` is what a **host** calls: resolve a language, run something on it,
+ask what is available. `PROVIDER_INTERFACE` is what the **router** calls: the
+five questions only a language module can answer. The router is a consumer of
+the second exactly as a host is a consumer of the first.
 
-The alternative, a parallel set of payload types for hosts, is worse: a
-`GreetRequest` defined twice is two distinct types, with a conversion at every
-call site that nothing checks. One definition, here, at the bottom.
+Every provider serves `PROVIDER_INTERFACE` at `PROVIDER_OBJECT_PATH` — that is
+what makes them interchangeable — and claims its own well-known bus name,
+because two peers cannot hold the same one.
 
-Because the re-export is by module as well as by item, `template::GreetRequest`,
-`template::names::OBJECT_PATH`, and `template_bus::greeting::GreetRequest` all
-resolve to the same items, not twins.
+| module      | what it holds                                                 |
+| ----------- | ------------------------------------------------------------- |
+| `names`     | both interfaces, both object paths, one constant per member    |
+| `language`  | the routing key that selects a provider                        |
+| `settings`  | what a host asks for, carried on every request                 |
+| `resolve`   | asking for a runtime, and being told which one you got         |
+| `provision` | how a provider describes a toolchain it does not install       |
+| `harness`   | the worker script a provider ships and the router runs         |
+| `exec`      | running code, and what came back                               |
+| `pool`      | warm-worker tuning and counters                                |
+| `version`   | `CONTRACT_VERSION` and the bind rule both sides apply          |
 
-So: a module author depends on `template` and gets behavior and vocabulary. A
-host depends on `template-bus` and gets vocabulary alone.
+## What is deliberately not here
 
-## What is deliberately absent
-
-**No behavior.** `greet` lives in `crates/template`. A payload type describes
-what a frame carries, not what the module does with it. The split is readable
-off the path: a name here is data, a name there is an obligation.
+**No behaviour.** No process is spawned, no byte is downloaded, and no path is
+touched by anything in this crate. A payload type describes what a frame
+carries, not what a module does with it.
 
 **No transport.** This crate does not depend on `tinybus` and holds no
 connection, client, or codec. A host already owns its connection — its reconnect
-policy, its timeouts, its tracing — and the useful part is the vocabulary.
+policy, its timeouts, its tracing — and the useful part is the vocabulary, not
+another wrapper around it.
 
-That is also structural, not just preference: `tinybus` is vendored as a
-submodule whose manifest inherits fields from its own nested
-`[workspace.package]`. Keeping the contract crate transport-free is what keeps
-it down to two dependencies and what lets anything in the workspace — or outside
-it — depend on it freely. CI asserts the dependency tree stays that way.
+That is also structural rather than only a preference: `tinybus` is vendored as
+a submodule whose manifest inherits from its own nested `[workspace.package]`.
+A crate that every workspace member — and every provider repository — can depend
+on has to stay transport-free.
 
-## Making a call
+## This crate sits underneath the implementations, not beside them
 
-Arguments travel as a positional JSON array — `#[tinybus::interface]` decodes
-them into a tuple — and the member name comes from `names`:
+`tinyruntime` depends on this crate and re-exports all of it, and so does each
+provider crate. `tinyruntime::ExecRequest` and `tinyruntime_bus::ExecRequest` are
+the *same type*, not structural twins.
 
-```rust,ignore
-use template_bus::{names, GreetRequest, GreetResponse};
+Defining a parallel set of payload types for hosts would mean a conversion at
+every call site that nothing checks. One definition, here, at the bottom.
 
-let proxy = connection.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
-let reply: GreetResponse = proxy
-    .call(names::methods::GREET, (GreetRequest::new("Ferris"),))
-    .await?;
-assert_eq!(reply.greeting, "Hello, Ferris!");
-```
-
-Nothing above is a string literal at a call site. Renaming the interface, the
-path, or a member is therefore a compile error in every consumer rather than an
-`UnknownMethod` discovered at runtime.
-
-## Staying in step with the module
-
-`names::METHODS` lists every member in dispatch order. `crates/template` asserts
-its served members against that list, so a method added to the interface without
-an entry here fails that crate's tests rather than surfacing in a host.
-
-## Versioning
-
-`CONTRACT_VERSION` describes *this vocabulary*, not the package. Bump its major
-component when a payload's wire form changes incompatibly or a member is removed
-or renamed, and its minor component when a member or an optional field is added.
-It is deliberately independent of the package version the release workflow owns,
-which tracks the shipped artifact.
-
-The payload tests pin the serde representation, because that representation is
-the wire form: a host and a module that disagree about a field name fail at
-runtime with a decode error, so the shape is asserted rather than assumed.
-
-## Generating a project from the template
-
-Rename the interface, the object path, and the member constants in `names`
-together, replace `greeting` with the first real payload family, and reset
-`CONTRACT_VERSION` to `(1, 0)` for the new contract. Keep the crate
-dependency-light: the moment it links a transport or a runtime, the reason it
-exists is gone.
+So: a module author depends on `tinyruntime` and gets behaviour and vocabulary.
+A host, or a provider, depends on `tinyruntime-bus` and gets vocabulary alone.
