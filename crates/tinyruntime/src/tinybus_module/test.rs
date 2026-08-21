@@ -81,7 +81,12 @@ impl OtherFakeProvider {
     }
 
     async fn harness(&self) -> TinyBusResult<WorkerHarness> {
-        std::future::ready(Ok(WorkerHarness::new("pool_worker.py", "# harness", "python"))).await
+        std::future::ready(Ok(WorkerHarness::new(
+            "pool_worker.py",
+            "# harness",
+            "python",
+        )))
+        .await
     }
 }
 
@@ -166,7 +171,10 @@ async fn a_provider_module_on_the_bus_is_listed_as_available() -> TinyBusResult<
 
     let provider = Connection::connect(bus.connect().await?).await?;
     provider
-        .serve_at(names::object_path_for(FAKE_BUS_NAME).as_str().try_into()?, FakeProvider)
+        .serve_at(
+            names::object_path_for(FAKE_BUS_NAME).as_str().try_into()?,
+            FakeProvider,
+        )
         .await?;
     provider.request_name(FAKE_BUS_NAME).await?;
 
@@ -198,7 +206,10 @@ async fn resolve_routes_to_a_provider_module() -> TinyBusResult<()> {
 
     let provider = Connection::connect(bus.connect().await?).await?;
     provider
-        .serve_at(names::object_path_for(FAKE_BUS_NAME).as_str().try_into()?, FakeProvider)
+        .serve_at(
+            names::object_path_for(FAKE_BUS_NAME).as_str().try_into()?,
+            FakeProvider,
+        )
         .await?;
     provider.request_name(FAKE_BUS_NAME).await?;
 
@@ -324,9 +335,20 @@ async fn each_provider_is_addressed_at_its_own_object_path() -> TinyBusResult<()
     let reply: LanguagesResponse = proxy.call(names::methods::LANGUAGES, ()).await?;
 
     assert_eq!(reply.languages.len(), 2);
-    assert!(reply.languages[0].available, "{:?}", reply.languages[0].detail);
-    assert_eq!(reply.languages[0].display_name.as_deref(), Some("Fake Node.js"));
-    assert!(reply.languages[1].available, "{:?}", reply.languages[1].detail);
+    assert!(
+        reply.languages[0].available,
+        "{:?}",
+        reply.languages[0].detail
+    );
+    assert_eq!(
+        reply.languages[0].display_name.as_deref(),
+        Some("Fake Node.js")
+    );
+    assert!(
+        reply.languages[1].available,
+        "{:?}",
+        reply.languages[1].detail
+    );
     assert_eq!(
         reply.languages[1].display_name.as_deref(),
         Some("Fake Python"),
