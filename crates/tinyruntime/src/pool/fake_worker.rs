@@ -159,7 +159,20 @@ fn serve() {
     let address = std::env::var("TINYRUNTIME_PROTOCOL_ADDR").expect("the pool supplies an address");
     let token = std::env::var("TINYRUNTIME_PROTOCOL_TOKEN").ok();
     let mode = Mode::of(&std::env::var(WORKER_MARKER).unwrap_or_default());
+    connect_and_serve(&address, token, mode);
+}
 
+/// Connect to the pool and behave as `mode` says.
+///
+/// Split from [`serve`] because everything above it reads the process
+/// environment, which a test cannot set — `unsafe` is forbidden workspace-wide.
+/// Everything below it is the part worth checking, and a test can drive it
+/// against a listener of its own.
+pub(crate) fn connect_and_serve(address: &str, token: Option<String>, mode: Mode) {
+    // Each connection starts without the flag: a spawned child serves exactly
+    // one, but the in-process tests share a process, and a `linger` left set by
+    // an earlier one would make the next sleep for two minutes.
+    LINGER.store(false, std::sync::atomic::Ordering::SeqCst);
     let stream = TcpStream::connect(address).expect("the pool is listening");
     match mode {
         // Two ways to be a worker the pool must refuse, both of which a real
@@ -168,7 +181,6 @@ fn serve() {
         Mode::Garbage => {
             let mut writer = stream.try_clone().expect("the socket clones");
             send(&mut writer, "not a handshake at all");
-            std::thread::sleep(std::time::Duration::from_secs(5));
             return;
         }
         Mode::Serve => {}
@@ -400,6 +412,98 @@ mod test {
         let text = String::from_utf8(replies).expect("utf-8");
         assert!(text.contains("this is not json"));
         assert!(text.trim_end().ends_with('}'));
+    }
+
+    #[test]
+    fn the_directives_that_change_how_the_process_ends_still_reply_first() {
+        // `print`, `exit-after-reply`, and `linger` differ from `die` in that
+        // the job *does* get an answer; only what happens to the process
+        // afterwards differs. That reply is what a test at the pool level
+        // asserts on, so it is worth checking here too.
+        for directive in [
+            Directive::Print("to-fd-one"),
+            Directive::ExitAfterReply,
+            Directive::Linger,
+        ] {
+            let frames = drive(&request_line("1", &directive));
+            assert_eq!(
+                frames.len(),
+                2,
+                "handshake and one reply for {:?}",
+                directive.code()
+            );
+            assert_eq!(frames[1]["id"], serde_json::json!("1"));
+            assert_eq!(frames[1]["ok"], serde_json::json!(true));
+        }
+    }
+
+    #[test]
+    fn a_silent_worker_connects_and_says_nothing() {
+        use std::io::Read as _;
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("loopback");
+        let address = listener.local_addr().expect("an address").to_string();
+        let worker = std::thread::spawn(move || {
+            super::connect_and_serve(&address, None, super::Mode::Silent)
+        });
+
+        let (mut stream, _) = listener.accept().expect("the worker connects");
+        let mut said = String::new();
+        stream.read_to_string(&mut said).expect("the stream closes");
+        assert!(said.is_empty(), "a silent worker sent `{said}`");
+        worker.join().expect("the worker finished");
+    }
+
+    #[test]
+    fn a_garbage_worker_sends_something_that_is_not_a_handshake() {
+        use std::io::Read as _;
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("loopback");
+        let address = listener.local_addr().expect("an address").to_string();
+        let worker = std::thread::spawn(move || {
+            super::connect_and_serve(&address, None, super::Mode::Garbage);
+        });
+
+        let (mut stream, _) = listener.accept().expect("the worker connects");
+        let mut said = String::new();
+        stream.read_to_string(&mut said).expect("the stream closes");
+        assert!(
+            serde_json::from_str::<serde_json::Value>(said.trim()).is_err(),
+            "a garbage worker sent valid json: `{said}`"
+        );
+        worker.join().expect("the worker finished");
+    }
+
+    #[test]
+    fn a_serving_worker_completes_the_handshake_over_a_real_socket() {
+        use std::io::{BufRead as _, BufReader, Write as _};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("loopback");
+        let address = listener.local_addr().expect("an address").to_string();
+        let worker = std::thread::spawn(move || {
+            super::connect_and_serve(&address, Some("secret".to_string()), super::Mode::Serve);
+        });
+
+        let (stream, _) = listener.accept().expect("the worker connects");
+        let mut writer = stream.try_clone().expect("the socket clones");
+        let mut lines = BufReader::new(stream).lines();
+
+        let handshake: serde_json::Value =
+            serde_json::from_str(&lines.next().expect("a handshake").expect("readable"))
+                .expect("the handshake is json");
+        assert_eq!(handshake["token"], serde_json::json!("secret"));
+
+        writer
+            .write_all(request_line("1", &Directive::Echo("round-trip")).as_bytes())
+            .expect("the request writes");
+        let reply: serde_json::Value =
+            serde_json::from_str(&lines.next().expect("a reply").expect("readable"))
+                .expect("the reply is json");
+        assert_eq!(reply["stdout"], serde_json::json!("round-trip"));
+
+        drop(writer);
+        drop(lines);
+        worker.join().expect("the worker finished");
     }
 
     #[test]
