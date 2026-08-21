@@ -45,3 +45,28 @@ fn decoding_normalises_the_same_way_the_constructor_does() {
     assert_eq!(decoded, Language::python());
     assert_eq!(decoded.as_str(), "python");
 }
+
+#[test]
+fn a_language_can_be_built_from_either_string_type() {
+    assert_eq!(Language::from("NodeJS"), Language::nodejs());
+    assert_eq!(Language::from(String::from(" PYTHON ")), Language::python());
+}
+
+#[test]
+fn ordering_is_by_identifier_so_a_listing_is_stable() {
+    let mut languages = vec![Language::python(), Language::nodejs()];
+    languages.sort();
+    assert_eq!(languages, vec![Language::nodejs(), Language::python()]);
+}
+
+#[test]
+fn the_identifier_constants_are_what_the_constructors_produce() {
+    assert_eq!(NODEJS, "nodejs");
+    assert_eq!(PYTHON, "python");
+    assert_eq!(Language::new(NODEJS), Language::nodejs());
+}
+
+#[test]
+fn an_empty_language_displays_as_nothing_rather_than_a_placeholder() {
+    assert_eq!(Language::new("").to_string(), "");
+}

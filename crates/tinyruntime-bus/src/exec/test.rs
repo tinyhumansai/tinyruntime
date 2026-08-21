@@ -61,3 +61,39 @@ fn the_request_wire_form_omits_nothing_a_worker_needs() {
         assert!(value.get(field).is_some(), "missing field {field}");
     }
 }
+
+#[test]
+fn a_response_reports_the_toolchain_that_ran_the_job() {
+    // Callers log this; a job that ran on an unexpected version is worth seeing.
+    let response = ExecResponse::new("", "", Some(0), "22.11.0");
+    assert_eq!(response.runtime_version, "22.11.0");
+}
+
+#[test]
+fn the_response_wire_form_is_pinned() {
+    let value = serde_json::to_value(ExecResponse::new("out", "err", Some(2), "1.0"))
+        .expect("response serialises");
+    assert_eq!(
+        value,
+        serde_json::json!({
+            "stdout": "out",
+            "stderr": "err",
+            "exit_code": 2,
+            "timed_out": false,
+            "elapsed_ms": 0,
+            "queue_wait_ms": 0,
+            "runtime_version": "1.0",
+        })
+    );
+}
+
+#[test]
+fn a_response_round_trips_across_the_wire() {
+    let response = ExecResponse::new("out", "", None, "1.0")
+        .with_timed_out(true)
+        .with_timings(5, 6);
+    let decoded: ExecResponse =
+        serde_json::from_value(serde_json::to_value(&response).expect("serialises"))
+            .expect("round-trips");
+    assert_eq!(decoded, response);
+}
