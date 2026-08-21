@@ -122,7 +122,7 @@ impl Distribution {
 ///
 /// A provider reports this for an extracted directory, because only it knows
 /// that Node.js puts `node` under `bin/` on Unix and at the root on Windows, or
-/// that a standalone CPython may be reachable as any of several names.
+/// that a standalone `CPython` may be reachable as any of several names.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct RuntimeLayout {
