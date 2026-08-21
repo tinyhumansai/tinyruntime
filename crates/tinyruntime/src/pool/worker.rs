@@ -26,11 +26,13 @@ use tinyruntime_bus::Language;
 
 use super::protocol::{Handshake, JobRequest, JobResponse};
 
-/// How long a freshly spawned worker has to complete its handshake.
+/// How long a freshly spawned worker has to complete its handshake by default.
 ///
-/// Generous, because a cold interpreter on a loaded machine can take seconds,
-/// and a spurious timeout here costs a spawn rather than a job.
-const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
+/// Generous, because a cold interpreter on a loaded machine can take seconds and
+/// a spurious timeout here costs a spawn rather than a job. [`Launch`] carries
+/// its own so a caller with a tighter budget — a test, or a host that would
+/// rather fail fast — can say so.
+pub const DEFAULT_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Everything needed to spawn a worker for one language.
 #[derive(Debug, Clone)]
@@ -45,6 +47,8 @@ pub struct Launch {
     pub env: Vec<(String, String)>,
     /// The protocol version the harness claims to implement.
     pub protocol_version: u32,
+    /// How long the worker has to connect back and hand over its handshake.
+    pub handshake_timeout: Duration,
 }
 
 impl Launch {
@@ -55,6 +59,10 @@ impl Launch {
     /// answering from the old toolchain.
     #[must_use]
     pub fn fingerprint(&self) -> String {
+        // The handshake budget is deliberately absent: it changes how long a
+        // failing spawn takes, not which toolchain a warm worker is running, and
+        // rebuilding a healthy pool over it would discard warm workers for
+        // nothing.
         format!(
             "{}|{}|{:?}|{:?}|{}",
             self.language.as_str(),
@@ -178,7 +186,7 @@ impl Worker {
             drain(launch.language.clone(), stderr, "stderr");
         }
 
-        let (stream, _) = tokio::time::timeout(HANDSHAKE_TIMEOUT, listener.accept())
+        let (stream, _) = tokio::time::timeout(launch.handshake_timeout, listener.accept())
             .await
             .map_err(|_| "the worker did not connect back in time".to_string())?
             .map_err(|error| format!("the worker connection was refused: {error}"))?;
@@ -186,7 +194,7 @@ impl Worker {
         let boxed: Box<dyn AsyncRead + Send + Unpin> = Box::new(reader);
         let mut responses = BufReader::new(boxed).lines();
 
-        let handshake = read_handshake(&mut responses).await?;
+        let handshake = read_handshake(&mut responses, launch.handshake_timeout).await?;
         verify_handshake(&handshake, launch, &token)?;
 
         tracing::info!(
@@ -320,8 +328,9 @@ impl Worker {
 /// Read the single handshake line, or say why it never came.
 async fn read_handshake(
     responses: &mut Lines<BufReader<Box<dyn AsyncRead + Send + Unpin>>>,
+    budget: Duration,
 ) -> std::result::Result<Handshake, String> {
-    match tokio::time::timeout(HANDSHAKE_TIMEOUT, responses.next_line()).await {
+    match tokio::time::timeout(budget, responses.next_line()).await {
         Ok(Ok(Some(line))) => serde_json::from_str(&line)
             .map_err(|error| format!("the worker's handshake could not be read: {error}")),
         Ok(Ok(None)) => Err("the worker exited before its handshake".to_string()),
@@ -347,11 +356,15 @@ fn verify_handshake(
         // spawned was given the secret.
         return Err("the worker did not present the secret it was given".to_string());
     }
-    if handshake.protocol != Some(launch.protocol_version) {
-        return Err(format!(
-            "the worker speaks protocol {:?}, not {}",
-            handshake.protocol, launch.protocol_version
-        ));
+    match handshake.protocol {
+        Some(version) if version == launch.protocol_version => {}
+        Some(version) => {
+            return Err(format!(
+                "the worker speaks protocol {version}, not {}",
+                launch.protocol_version
+            ));
+        }
+        None => return Err("the worker did not say which protocol it speaks".to_string()),
     }
     Ok(())
 }

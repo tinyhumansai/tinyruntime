@@ -12,6 +12,7 @@ fn launch(language: Language) -> Launch {
         args: vec!["worker.js".to_string()],
         env: Vec::new(),
         protocol_version: 1,
+        handshake_timeout: std::time::Duration::from_secs(30),
     }
 }
 

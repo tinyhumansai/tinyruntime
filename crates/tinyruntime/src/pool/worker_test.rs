@@ -15,6 +15,7 @@ fn launch() -> Launch {
         args: vec!["worker.js".to_string()],
         env: vec![("PATH".to_string(), "/usr/bin".to_string())],
         protocol_version: 1,
+        handshake_timeout: Duration::from_secs(30),
     }
 }
 
@@ -67,6 +68,28 @@ fn a_handshake_on_another_protocol_is_refused() {
 }
 
 #[test]
+fn a_handshake_that_names_no_protocol_is_refused() {
+    // A harness that omits the field must not be read as agreeing with us.
+    let handshake = Handshake {
+        ready: true,
+        protocol: None,
+        token: Some("issued".to_string()),
+        ..Handshake::default()
+    };
+    let error = verify_handshake(&handshake, &launch(), "issued").expect_err("refused");
+    assert!(error.contains("which protocol"), "got `{error}`");
+}
+
+#[test]
+fn the_handshake_budget_does_not_take_part_in_the_fingerprint() {
+    // It changes how long a failing spawn takes, not which toolchain the warm
+    // workers are running; rebuilding a healthy pool over it would be waste.
+    let mut impatient = launch();
+    impatient.handshake_timeout = Duration::from_millis(1);
+    assert_eq!(launch().fingerprint(), impatient.fingerprint());
+}
+
+#[test]
 fn a_worker_that_failed_to_start_reports_its_own_reason() {
     let handshake = Handshake {
         ready: false,
@@ -102,6 +125,7 @@ async fn a_worker_that_never_connects_back_fails_rather_than_hanging() {
         return;
     }
     let mut spec = launch();
+    spec.handshake_timeout = Duration::from_secs(2);
     spec.binary = binary.into();
     spec.args = if cfg!(windows) {
         vec!["/c".to_string(), "exit".to_string()]
@@ -110,7 +134,7 @@ async fn a_worker_that_never_connects_back_fails_rather_than_hanging() {
     };
 
     let outcome = tokio::time::timeout(
-        Duration::from_secs(60),
+        Duration::from_secs(30),
         crate::pool::worker::Worker::spawn(&spec),
     )
     .await

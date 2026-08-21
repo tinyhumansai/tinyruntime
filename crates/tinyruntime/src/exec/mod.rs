@@ -113,6 +113,7 @@ impl Engine {
             args: harness.command_args(&script.to_string_lossy()),
             env,
             protocol_version: harness.protocol_version,
+            handshake_timeout: crate::pool::worker::DEFAULT_HANDSHAKE_TIMEOUT,
         })
     }
 }
