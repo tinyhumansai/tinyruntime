@@ -449,7 +449,7 @@ mod test {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("loopback");
         let address = listener.local_addr().expect("an address").to_string();
         let worker = std::thread::spawn(move || {
-            super::connect_and_serve(&address, None, super::Mode::Silent)
+            super::connect_and_serve(&address, None, super::Mode::Silent);
         });
 
         let (mut stream, _) = listener.accept().expect("the worker connects");
