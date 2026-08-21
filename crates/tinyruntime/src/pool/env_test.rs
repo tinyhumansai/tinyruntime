@@ -19,22 +19,24 @@ fn the_toolchain_directory_comes_first_on_path() {
 }
 
 #[test]
-fn a_secret_in_this_process_does_not_reach_a_worker() {
+fn a_variable_this_process_holds_does_not_reach_a_worker() {
     // The whole reason the environment is an allow-list: this module is loaded
     // into a host that holds credentials, and a worker runs code that must not
-    // be able to read them.
-    // SAFETY-equivalent note: single-threaded test, no other thread reads the env.
-    unsafe {
-        std::env::set_var("TINYRUNTIME_TEST_SECRET", "super-secret-token");
-    }
-    let env = build(Path::new("/managed/bin"), &[]);
-    unsafe {
-        std::env::remove_var("TINYRUNTIME_TEST_SECRET");
-    }
-
+    // be able to read them. Cargo sets `CARGO_MANIFEST_DIR` in this process, so
+    // it is a real unlisted variable rather than one the test planted.
     assert!(
-        !env.iter().any(|(name, _)| name == "TINYRUNTIME_TEST_SECRET"),
+        std::env::var("CARGO_MANIFEST_DIR").is_ok(),
+        "the test relies on cargo setting this"
+    );
+
+    let env = build(Path::new("/managed/bin"), &[]);
+    assert!(
+        !env.iter().any(|(name, _)| name == "CARGO_MANIFEST_DIR"),
         "an unlisted variable leaked into the worker environment"
+    );
+    assert!(
+        env.iter().any(|(name, _)| name == "PATH"),
+        "a worker still needs the variables on the allow-list"
     );
 }
 
