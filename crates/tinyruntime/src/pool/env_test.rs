@@ -85,3 +85,36 @@ async fn rewriting_replaces_a_stale_harness() {
 
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "new");
 }
+
+#[tokio::test]
+async fn a_harness_that_cannot_be_written_reports_a_storage_failure() {
+    // The directory is a file. A worker with no harness to run is a failure
+    // worth naming rather than a spawn that mysteriously exits.
+    let scratch = tempfile::tempdir().unwrap();
+    let blocker = scratch.path().join("not-a-directory");
+    std::fs::write(&blocker, b"x").unwrap();
+
+    let error = materialise(
+        &blocker.join("inner"),
+        &WorkerHarness::new("pool_worker.js", "// body", "node"),
+    )
+    .await
+    .expect_err("a file cannot contain the harness");
+    assert!(
+        matches!(error, crate::error::Error::Storage(_)),
+        "got {error:?}"
+    );
+}
+
+#[test]
+fn a_worker_with_no_inherited_path_still_gets_the_toolchain_directory() {
+    // `PATH` is built rather than inherited, so the toolchain is reachable even
+    // where this process has none.
+    let env = build(Path::new("/managed/bin"), &[]);
+    let path = env
+        .iter()
+        .find(|(name, _)| name == "PATH")
+        .map(|(_, value)| value.clone())
+        .expect("a worker always gets a PATH");
+    assert!(path.contains("/managed/bin"));
+}

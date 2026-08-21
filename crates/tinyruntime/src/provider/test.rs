@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tinyruntime_bus::{CONTRACT_VERSION, Language, ProviderDescriptor};
 
 use super::stub::{DownProvider, StubProvider};
-use super::{Registry, verify_contract};
+use super::{Registry, Route, verify_contract};
 use crate::error::Error;
 
 fn registry_with_node() -> Registry {
