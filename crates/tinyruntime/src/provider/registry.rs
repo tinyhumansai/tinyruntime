@@ -36,7 +36,7 @@ impl Registry {
     /// overriding a default expects.
     pub fn register(
         &mut self,
-        language: Language,
+        language: &Language,
         bus_name: impl Into<String>,
         provider: Arc<dyn Provider>,
     ) {
@@ -48,7 +48,7 @@ impl Registry {
         match self
             .routes
             .iter_mut()
-            .find(|existing| existing.language == language)
+            .find(|existing| &existing.language == language)
         {
             Some(existing) => *existing = route,
             None => self.routes.push(route),

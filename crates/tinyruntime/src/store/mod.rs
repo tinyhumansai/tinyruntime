@@ -182,12 +182,10 @@ fn promote_blocking(staged: &Path, destination: &Path, language: &Language) -> R
 /// Used for staging cleanup, where a failure is worth a log line and nothing
 /// more: the install already succeeded, and the leftover is skipped on reuse.
 pub async fn discard(path: &Path) {
-    if let Err(error) = tokio::fs::remove_dir_all(path).await {
-        if error.kind() != std::io::ErrorKind::NotFound {
-            tracing::debug!(
-                "[tinyruntime::store] a staging directory could not be removed: {error}"
-            );
-        }
+    if let Err(error) = tokio::fs::remove_dir_all(path).await
+        && error.kind() != std::io::ErrorKind::NotFound
+    {
+        tracing::debug!("[tinyruntime::store] a staging directory could not be removed: {error}");
     }
 }
 

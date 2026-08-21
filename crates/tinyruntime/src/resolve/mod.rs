@@ -140,19 +140,19 @@ impl Resolver {
         settings: &RuntimeSettings,
         provider: &dyn Provider,
     ) -> Result<Option<ResolvedRuntime>> {
-        if settings.prefer_system {
-            if let Some(layout) = provider.detect_system(settings).await? {
-                tracing::info!(
-                    language = language.as_str(),
-                    version = %layout.version,
-                    "[tinyruntime::resolve] reusing a compatible toolchain from the host"
-                );
-                return Ok(Some(ResolvedRuntime::from_layout(
-                    language.clone(),
-                    RuntimeSource::System,
-                    layout,
-                )));
-            }
+        if settings.prefer_system
+            && let Some(layout) = provider.detect_system(settings).await?
+        {
+            tracing::info!(
+                language = language.as_str(),
+                version = %layout.version,
+                "[tinyruntime::resolve] reusing a compatible toolchain from the host"
+            );
+            return Ok(Some(ResolvedRuntime::from_layout(
+                language.clone(),
+                RuntimeSource::System,
+                layout,
+            )));
         }
 
         let root = store::cache_root(settings.cache_dir(), language);

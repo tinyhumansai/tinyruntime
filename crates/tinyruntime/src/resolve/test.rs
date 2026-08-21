@@ -27,7 +27,7 @@ fn settings(cache_dir: &std::path::Path) -> RuntimeSettings {
 
 fn resolver_over(provider: Arc<dyn Provider>) -> Resolver {
     let mut registry = Registry::new();
-    registry.register(Language::nodejs(), "ai.example.Provider", provider);
+    registry.register(&Language::nodejs(), "ai.example.Provider", provider);
     Resolver::new(registry, reqwest::Client::new())
 }
 
@@ -118,7 +118,7 @@ async fn an_installed_toolchain_in_the_cache_is_reused_on_a_cold_start() {
 
     assert_eq!(found.source, RuntimeSource::Managed);
     assert_eq!(
-        resolved.install_dir.as_deref(),
+        found.install_dir.as_deref(),
         Some(installed.to_string_lossy().as_ref())
     );
     assert_eq!(provider.selections.load(Ordering::Relaxed), 0);
