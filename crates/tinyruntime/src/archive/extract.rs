@@ -39,10 +39,10 @@ fn unpack_tar(reader: impl io::Read, staging_dir: &Path) -> io::Result<()> {
 /// somewhere nobody asked for.
 pub(super) fn zip(archive: &Path, staging_dir: &Path) -> io::Result<()> {
     let file = File::open(archive)?;
-    let mut zip = zip::ZipArchive::new(file).map_err(zip_io_error)?;
+    let mut zip = zip::ZipArchive::new(file).map_err(|error| zip_io_error(&error))?;
 
     for index in 0..zip.len() {
-        let mut entry = zip.by_index(index).map_err(zip_io_error)?;
+        let mut entry = zip.by_index(index).map_err(|error| zip_io_error(&error))?;
         let Some(relative) = entry.enclosed_name() else {
             tracing::warn!(
                 "[tinyruntime::archive] skipped a zip entry whose path escapes the staging directory"
@@ -72,6 +72,6 @@ pub(super) fn zip(archive: &Path, staging_dir: &Path) -> io::Result<()> {
 }
 
 /// Render a zip-crate failure as an IO error so every format reports the same way.
-fn zip_io_error(error: zip::result::ZipError) -> io::Error {
+fn zip_io_error(error: &zip::result::ZipError) -> io::Error {
     io::Error::other(error.to_string())
 }

@@ -88,9 +88,9 @@ pub(super) async fn run(
 /// afterwards because a verified archive is several hundred megabytes of no
 /// further use.
 async fn remove_archive(path: &std::path::Path) {
-    if let Err(error) = tokio::fs::remove_file(path).await {
-        if error.kind() != std::io::ErrorKind::NotFound {
-            tracing::debug!("[tinyruntime::resolve] the archive could not be removed: {error}");
-        }
+    if let Err(error) = tokio::fs::remove_file(path).await
+        && error.kind() != std::io::ErrorKind::NotFound
+    {
+        tracing::debug!("[tinyruntime::resolve] the archive could not be removed: {error}");
     }
 }

@@ -56,7 +56,7 @@ async fn a_compatible_host_toolchain_is_reused_without_touching_a_channel() {
         Arc::new(StubProvider::new(Language::nodejs()).with_system(layout("1.2.3", "/usr/local")));
     let resolver = resolver_over(Arc::clone(&provider) as Arc<dyn Provider>);
 
-    let resolved = resolver
+    let found = resolver
         .require(&ResolveRequest::new(
             Language::nodejs(),
             settings(scratch.path()),
@@ -64,9 +64,9 @@ async fn a_compatible_host_toolchain_is_reused_without_touching_a_channel() {
         .await
         .expect("the host toolchain resolves");
 
-    assert_eq!(resolved.source, RuntimeSource::System);
-    assert_eq!(resolved.version, "1.2.3");
-    assert!(resolved.install_dir.is_none());
+    assert_eq!(found.source, RuntimeSource::System);
+    assert_eq!(found.version, "1.2.3");
+    assert!(found.install_dir.is_none());
     assert_eq!(
         provider.selections.load(Ordering::Relaxed),
         0,
@@ -108,7 +108,7 @@ async fn an_installed_toolchain_in_the_cache_is_reused_on_a_cold_start() {
     );
     let resolver = resolver_over(Arc::clone(&provider) as Arc<dyn Provider>);
 
-    let resolved = resolver
+    let found = resolver
         .require(&ResolveRequest::probe(
             Language::nodejs(),
             settings(scratch.path()),
@@ -116,7 +116,7 @@ async fn an_installed_toolchain_in_the_cache_is_reused_on_a_cold_start() {
         .await
         .expect("the cached toolchain resolves");
 
-    assert_eq!(resolved.source, RuntimeSource::Managed);
+    assert_eq!(found.source, RuntimeSource::Managed);
     assert_eq!(
         resolved.install_dir.as_deref(),
         Some(installed.to_string_lossy().as_ref())

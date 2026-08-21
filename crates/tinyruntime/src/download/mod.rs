@@ -133,12 +133,10 @@ async fn stream_to_file(
 /// Leaving it behind is the real risk: a later run that finds an archive already
 /// on disk should never be able to reuse bytes that failed verification.
 async fn remove_partial(target: &Path) {
-    if let Err(error) = tokio::fs::remove_file(target).await {
-        if error.kind() != std::io::ErrorKind::NotFound {
-            tracing::warn!(
-                "[tinyruntime::download] a rejected archive could not be removed: {error}"
-            );
-        }
+    if let Err(error) = tokio::fs::remove_file(target).await
+        && error.kind() != std::io::ErrorKind::NotFound
+    {
+        tracing::warn!("[tinyruntime::download] a rejected archive could not be removed: {error}");
     }
 }
 
