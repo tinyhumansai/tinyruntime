@@ -20,9 +20,12 @@ ask what is available. `PROVIDER_INTERFACE` is what the **router** calls: the
 five questions only a language module can answer. The router is a consumer of
 the second exactly as a host is a consumer of the first.
 
-Every provider serves `PROVIDER_INTERFACE` at `PROVIDER_OBJECT_PATH` — that is
-what makes them interchangeable — and claims its own well-known bus name,
-because two peers cannot hold the same one.
+Every provider implements `PROVIDER_INTERFACE` — that is what makes them
+interchangeable — and claims its own well-known bus name, because two peers
+cannot hold the same one. Each therefore serves at its own object path, derived
+from that bus name by `object_path_for`: `tinybus_module!` builds a module's
+manifest path the same way, so a provider serving anywhere else would ship a
+manifest that disagreed with the object it exports.
 
 | module      | what it holds                                                 |
 | ----------- | ------------------------------------------------------------- |
