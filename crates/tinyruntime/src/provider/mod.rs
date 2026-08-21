@@ -23,6 +23,8 @@ use crate::error::{Error, Result};
 
 mod bus;
 mod registry;
+#[cfg(test)]
+pub(crate) mod stub;
 
 pub use bus::BusProvider;
 pub use registry::Registry;
