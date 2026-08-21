@@ -134,3 +134,7 @@ impl Provider for BusProvider {
         self.call(names::provider_methods::HARNESS, ()).await
     }
 }
+
+#[cfg(test)]
+#[path = "bus_test.rs"]
+mod test;

@@ -124,3 +124,133 @@ async fn a_provider_with_no_harness_cannot_execute() {
         "got {error:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The whole path, end to end
+//
+// Resolve, build a launch from the provider's harness, start a pool, run a job.
+// The "interpreter" is this test binary re-executed as a worker, so the engine's
+// own wiring is exercised without depending on Node or Python being installed.
+// ---------------------------------------------------------------------------
+
+use crate::pool::fake_worker::{self, Directive};
+
+/// The logical executable the fake harness runs under.
+const TOOL: &str = "tool";
+
+/// A provider reporting this test binary as the toolchain, with a harness whose
+/// flags make it serve the worker protocol.
+fn worker_provider() -> Arc<StubProvider> {
+    let binary = std::env::current_exe().expect("a test binary has a path");
+    let bin_dir = binary
+        .parent()
+        .expect("the binary is in a directory")
+        .to_string_lossy()
+        .into_owned();
+
+    let launch = fake_worker::launch(Language::nodejs());
+    let mut harness = WorkerHarness::new("worker-harness", "unused by this worker", TOOL)
+        .with_env(fake_worker::WORKER_MARKER, "1");
+    // The script path `command_args` appends is an extra libtest filter that
+    // matches no test, so `--exact` still selects only the worker entry point.
+    harness.args_before_script = launch.args.clone();
+
+    Arc::new(
+        StubProvider::new(Language::nodejs())
+            .with_system(
+                RuntimeLayout::new("1.0.0-test", bin_dir)
+                    .with_executable(TOOL, binary.to_string_lossy().into_owned()),
+            )
+            .with_harness(harness),
+    )
+}
+
+#[tokio::test]
+async fn a_job_runs_through_resolution_launch_and_the_pool() {
+    let scratch = tempfile::tempdir().unwrap();
+    let engine = engine_over(worker_provider(), scratch.path());
+
+    let request = ExecRequest::new(
+        Language::nodejs(),
+        settings(scratch.path()),
+        Directive::Echo("through-the-engine").code(),
+    );
+    let response = engine.execute(&request).await.expect("the job runs");
+
+    assert_eq!(response.stdout, "through-the-engine");
+    assert!(response.success());
+    assert_eq!(
+        response.runtime_version, "1.0.0-test",
+        "the reply carries the resolved toolchain"
+    );
+}
+
+#[tokio::test]
+async fn the_harness_is_written_where_the_worker_is_launched_from() {
+    let scratch = tempfile::tempdir().unwrap();
+    let engine = engine_over(worker_provider(), scratch.path());
+
+    engine
+        .execute(&ExecRequest::new(
+            Language::nodejs(),
+            settings(scratch.path()),
+            Directive::Echo("x").code(),
+        ))
+        .await
+        .expect("the job runs");
+
+    let written = scratch.path().join("nodejs").join("worker-harness");
+    assert!(written.is_file(), "the harness was not materialised");
+    assert_eq!(
+        std::fs::read_to_string(&written).unwrap(),
+        "unused by this worker"
+    );
+}
+
+#[tokio::test]
+async fn a_second_job_reuses_the_pool_the_first_one_built() {
+    let scratch = tempfile::tempdir().unwrap();
+    let engine = engine_over(worker_provider(), scratch.path());
+    let request = ExecRequest::new(
+        Language::nodejs(),
+        settings(scratch.path()),
+        Directive::Echo("x").code(),
+    );
+
+    engine.execute(&request).await.expect("the first job runs");
+    engine.execute(&request).await.expect("the second job runs");
+
+    let stats = engine.pool_stats().await;
+    assert_eq!(stats.len(), 1, "a second pool was built for the same launch");
+    assert_eq!(stats[0].jobs_total, 2);
+    assert_eq!(
+        stats[0].worker_spawns, 1,
+        "two jobs spawned {} interpreters",
+        stats[0].worker_spawns
+    );
+}
+
+#[tokio::test]
+async fn a_failing_job_comes_back_as_output_rather_than_an_error() {
+    let scratch = tempfile::tempdir().unwrap();
+    let engine = engine_over(worker_provider(), scratch.path());
+
+    let response = engine
+        .execute(&ExecRequest::new(
+            Language::nodejs(),
+            settings(scratch.path()),
+            Directive::Fail("threw").code(),
+        ))
+        .await
+        .expect("a throwing job still returns");
+
+    assert!(!response.success());
+    assert_eq!(response.stderr, "threw");
+}
+
+#[tokio::test]
+async fn pool_stats_are_empty_until_something_runs() {
+    let scratch = tempfile::tempdir().unwrap();
+    let engine = engine_over(worker_provider(), scratch.path());
+    assert!(engine.pool_stats().await.is_empty());
+}
