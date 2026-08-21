@@ -38,9 +38,14 @@ pub(crate) const WORKER_MARKER: &str = "TINYRUNTIME_TEST_WORKER";
 /// different paths, and both need a worker that behaves that way on purpose.
 static LINGER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// How long the `hang` directive stays silent. Longer than any deadline a test
-/// sets, so the pool's grace is what ends the wait.
-const HANG_FOR: std::time::Duration = std::time::Duration::from_secs(120);
+/// How long the `hang` and `linger` directives keep a worker unresponsive.
+///
+/// Comfortably longer than the longest deadline any test sets — the pool's own
+/// grace above a soft deadline is ten seconds — so the pool is always what ends
+/// the wait. Deliberately not much longer than that: an unresponsive child is
+/// still holding a process slot, and under a parallel run a two-minute sleep
+/// turns a ten-second suite into a two-minute one.
+const HANG_FOR: std::time::Duration = std::time::Duration::from_secs(25);
 
 /// What the fake worker should do with a job, spelled in the job's `code`.
 ///
