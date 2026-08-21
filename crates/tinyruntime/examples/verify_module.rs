@@ -4,7 +4,7 @@ use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use template::{GreetRequest, GreetResponse, names};
+use tinyruntime::{LanguagesResponse, names};
 use tinybus::Connection;
 use tinybus::broker::Broker;
 use tinybus::module::ModuleHost;
@@ -40,23 +40,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     })
     .await??;
 
+    // `Languages` is the right probe for a router: it exercises the whole
+    // dispatch path and needs neither a provider module nor a network, so it
+    // verifies the artifact rather than the environment it happens to run in.
     let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
-    let reply: GreetResponse = proxy
-        .call(names::methods::GREET, (GreetRequest::new("TinyBus"),))
-        .await?;
-    if reply.greeting != "Hello, TinyBus!" {
-        return Err(io::Error::other(format!(
-            "module returned an unexpected greeting: {}",
-            reply.greeting
-        ))
-        .into());
+    let reply: LanguagesResponse = proxy.call(names::methods::LANGUAGES, ()).await?;
+    if reply.languages.is_empty() {
+        return Err(io::Error::other("module routed no languages at all").into());
     }
 
     println!(
-        "verified {} as TinyBus module `{}`",
+        "verified {} as TinyBus module `{}`, routing {} language(s):",
         module.display(),
-        info.name
+        info.name,
+        reply.languages.len()
     );
+    for status in &reply.languages {
+        let state = if status.available {
+            "available".to_string()
+        } else {
+            format!(
+                "unavailable ({})",
+                status.detail.as_deref().unwrap_or("no reason given")
+            )
+        };
+        println!("  {} -> {} [{state}]", status.language, status.bus_name);
+    }
     broker_task.abort();
     Ok(())
 }
