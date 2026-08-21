@@ -25,10 +25,14 @@ fn settings(cache_dir: &std::path::Path) -> RuntimeSettings {
     settings
 }
 
-fn resolver_over(provider: Arc<dyn Provider>) -> Resolver {
+fn registry_for(provider: Arc<dyn Provider>) -> Registry {
     let mut registry = Registry::new();
     registry.register(&Language::nodejs(), "ai.example.Provider", provider);
-    Resolver::new(registry, reqwest::Client::new())
+    registry
+}
+
+fn resolver_over(provider: Arc<dyn Provider>) -> Resolver {
+    Resolver::new(registry_for(provider), reqwest::Client::new())
 }
 
 #[tokio::test]
@@ -297,45 +301,208 @@ async fn a_provider_on_an_incompatible_contract_is_refused_before_installing() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// The install pipeline, against real bytes
+//
+// Everything above stops before the download. These run the whole thing —
+// select, lock, fetch, verify, unpack, promote, re-inspect — against an archive
+// served over loopback, which is the only way to cover the ordering that makes
+// a concurrent install safe.
+// ---------------------------------------------------------------------------
+
+use tinyruntime_bus::ArchiveFormat;
+
+use crate::testing;
+
+/// A provider offering `archive` at `url`, and reporting whatever is installed.
+fn installing_provider(url: &str, digest: Option<&str>, layout_version: &str) -> Arc<StubProvider> {
+    let mut distribution = Distribution::new(
+        "1.0.0",
+        "toolchain-1.0.0.tar.gz",
+        url,
+        ArchiveFormat::TarGz,
+    );
+    if let Some(digest) = digest {
+        distribution = distribution.with_sha256(digest);
+    }
+    Arc::new(
+        StubProvider::new(Language::nodejs())
+            .with_distribution(distribution)
+            .with_layout(layout("1.0.0", "/installed")),
+    )
+    .tap_version(layout_version)
+}
+
+/// Small shim so the helper above reads in one expression.
+trait TapVersion {
+    fn tap_version(self, version: &str) -> Self;
+}
+
+impl TapVersion for Arc<StubProvider> {
+    fn tap_version(self, _version: &str) -> Self {
+        self
+    }
+}
+
 #[tokio::test]
-async fn an_install_that_produces_no_toolchain_is_reported_as_such() {
-    // The provider says what to install and then finds nothing in it. That is a
-    // distinct failure from a download or an unpack going wrong.
+async fn a_managed_toolchain_is_downloaded_verified_unpacked_and_promoted() {
     let scratch = tempfile::tempdir().unwrap();
-    let archive = scratch.path().join("source.tar.gz");
-    write_single_root_tarball(&archive);
-    let url = format!("file://{}", archive.display());
+    let archive = testing::single_root_archive("toolchain-1.0.0", ArchiveFormat::TarGz);
+    let digest = testing::digest(&archive);
+    let (url, server) = testing::serve(archive, 1);
 
-    let provider = Arc::new(StubProvider::new(Language::nodejs()).with_distribution(
-        Distribution::new("1.0.0", "t.tar.gz", &url, ArchiveFormat::TarGz),
-    ));
-    let resolver = resolver_over(provider);
+    let provider = installing_provider(&url, Some(&digest), "1.0.0");
+    let resolver = resolver_over(Arc::clone(&provider) as Arc<dyn Provider>);
 
-    let error = resolver
-        .resolve(&ResolveRequest::new(
+    let resolved = resolver
+        .require(&ResolveRequest::new(
             Language::nodejs(),
             settings(scratch.path()),
         ))
         .await
-        .expect_err("a file URL is not fetchable, which is the point below");
+        .expect("the toolchain installs");
 
-    // `reqwest` does not serve `file://`, so this is a download failure rather
-    // than an empty install — the assertion that matters is that the router
-    // reported it rather than panicking or installing something empty.
-    assert!(matches!(error, Error::Download { .. }), "got {error:?}");
+    assert_eq!(resolved.source, RuntimeSource::Managed);
+    let install_dir = scratch.path().join("toolchain-1.0.0");
+    assert_eq!(
+        resolved.install_dir.as_deref(),
+        Some(install_dir.to_string_lossy().as_ref())
+    );
+    assert!(
+        install_dir.join("bin/tool").is_file(),
+        "the archive contents were not promoted into place"
+    );
+    assert!(
+        !scratch.path().join("toolchain-1.0.0.tar.gz").exists(),
+        "the archive was left behind after a successful install"
+    );
+    assert_eq!(server.join().expect("the server finished"), 1);
 }
 
-/// Write a tarball with exactly one root directory, for the install path.
-fn write_single_root_tarball(path: &std::path::Path) {
-    let file = std::fs::File::create(path).unwrap();
-    let encoder = flate2::write::GzEncoder::new(file, flate2::Compression::fast());
-    let mut builder = tar::Builder::new(encoder);
-    let mut header = tar::Header::new_gnu();
-    header.set_size(0);
-    header.set_mode(0o644);
-    header.set_cksum();
-    builder
-        .append_data(&mut header, "toolchain-1.0.0/marker", &b""[..])
-        .unwrap();
-    builder.into_inner().unwrap().finish().unwrap();
+#[tokio::test]
+async fn a_second_resolution_reuses_the_install_rather_than_downloading_again() {
+    // The server is told to serve exactly once. A second download would hang
+    // and then fail, which is what makes this assertion mean something.
+    let scratch = tempfile::tempdir().unwrap();
+    let archive = testing::single_root_archive("toolchain-1.0.0", ArchiveFormat::TarGz);
+    let digest = testing::digest(&archive);
+    let (url, server) = testing::serve(archive, 1);
+
+    let provider = installing_provider(&url, Some(&digest), "1.0.0");
+    let request = ResolveRequest::new(Language::nodejs(), settings(scratch.path()));
+
+    // A fresh resolver each time, so the in-process memo cannot be what answers.
+    Resolver::new(registry_for(Arc::clone(&provider) as Arc<dyn Provider>), reqwest::Client::new())
+        .require(&request)
+        .await
+        .expect("the first resolution installs");
+
+    let reused = Resolver::new(
+        registry_for(Arc::clone(&provider) as Arc<dyn Provider>),
+        reqwest::Client::new(),
+    )
+    .require(&request)
+    .await
+    .expect("the second resolution reuses");
+
+    assert_eq!(reused.source, RuntimeSource::Managed);
+    assert_eq!(server.join().expect("the server finished"), 1);
+}
+
+#[tokio::test]
+async fn an_archive_that_fails_verification_is_not_installed() {
+    // The bytes arrived intact and are the wrong bytes. Installing them would
+    // give this host an interpreter nobody published.
+    let scratch = tempfile::tempdir().unwrap();
+    let archive = testing::single_root_archive("toolchain-1.0.0", ArchiveFormat::TarGz);
+    let (url, server) = testing::serve(archive, 1);
+
+    let provider = installing_provider(&url, Some(&"00".repeat(32)), "1.0.0");
+    let resolver = resolver_over(provider);
+
+    let error = resolver
+        .require(&ResolveRequest::new(
+            Language::nodejs(),
+            settings(scratch.path()),
+        ))
+        .await
+        .expect_err("a mismatched archive is refused");
+
+    assert!(matches!(error, Error::DigestMismatch { .. }), "got {error:?}");
+    assert!(!error.is_retryable(), "retrying produces the same wrong bytes");
+    assert!(
+        !scratch.path().join("toolchain-1.0.0").exists(),
+        "a refused archive was installed anyway"
+    );
+    let _ = server.join();
+}
+
+#[tokio::test]
+async fn an_install_the_provider_cannot_find_a_toolchain_in_is_reported_as_empty() {
+    // The archive unpacked fine and holds nothing the provider recognises. That
+    // is a distinct failure from the download or the unpacking going wrong.
+    let scratch = tempfile::tempdir().unwrap();
+    let archive = testing::single_root_archive("toolchain-1.0.0", ArchiveFormat::TarGz);
+    let digest = testing::digest(&archive);
+    let (url, server) = testing::serve(archive, 1);
+
+    // No layout: the provider never recognises what was installed.
+    let provider = Arc::new(StubProvider::new(Language::nodejs()).with_distribution(
+        Distribution::new("1.0.0", "toolchain-1.0.0.tar.gz", &url, ArchiveFormat::TarGz)
+            .with_sha256(digest),
+    ));
+    let resolver = resolver_over(provider);
+
+    let error = resolver
+        .require(&ResolveRequest::new(
+            Language::nodejs(),
+            settings(scratch.path()),
+        ))
+        .await
+        .expect_err("an unrecognised install is an error");
+
+    assert!(matches!(error, Error::EmptyInstall(_)), "got {error:?}");
+    let _ = server.join();
+}
+
+#[tokio::test]
+async fn an_archive_that_is_not_the_declared_format_fails_as_an_install_error() {
+    // A channel serving a zip where it promised a tarball. The download
+    // succeeds and the unpacking is what fails.
+    let scratch = tempfile::tempdir().unwrap();
+    let archive = testing::single_root_archive("toolchain-1.0.0", ArchiveFormat::Zip);
+    let digest = testing::digest(&archive);
+    let (url, server) = testing::serve(archive, 1);
+
+    let provider = installing_provider(&url, Some(&digest), "1.0.0");
+    let resolver = resolver_over(provider);
+
+    let error = resolver
+        .require(&ResolveRequest::new(
+            Language::nodejs(),
+            settings(scratch.path()),
+        ))
+        .await
+        .expect_err("a mislabelled archive cannot unpack");
+
+    assert!(matches!(error, Error::Install { .. }), "got {error:?}");
+    let _ = server.join();
+}
+
+#[tokio::test]
+async fn an_unreachable_channel_fails_the_install_retryably() {
+    let scratch = tempfile::tempdir().unwrap();
+    let provider = installing_provider("http://127.0.0.1:1/archive", None, "1.0.0");
+    let resolver = resolver_over(provider);
+
+    let error = resolver
+        .require(&ResolveRequest::new(
+            Language::nodejs(),
+            settings(scratch.path()),
+        ))
+        .await
+        .expect_err("an unreachable channel fails");
+
+    assert!(matches!(error, Error::Download { .. }), "got {error:?}");
+    assert!(error.is_retryable());
 }
