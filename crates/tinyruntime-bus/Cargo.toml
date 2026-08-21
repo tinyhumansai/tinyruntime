@@ -1,14 +1,14 @@
 [package]
-name = "template-bus"
+name = "tinyruntime-bus"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "The TinyBus wire contract for the template module: member names, payload types, and the contract version."
-documentation = "https://docs.rs/template-bus"
+description = "The TinyBus wire contract for tinyruntime: the router and provider interfaces, the runtime payload types, and the contract version."
+documentation = "https://docs.rs/tinyruntime-bus"
 readme = "README.md"
-keywords = ["tinybus", "module", "contract", "template"]
+keywords = ["tinybus", "runtime", "nodejs", "python", "contract"]
 categories = ["development-tools"]
 publish = false
 
