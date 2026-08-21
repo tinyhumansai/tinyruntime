@@ -530,7 +530,48 @@ async fn a_cache_root_that_cannot_be_listed_is_treated_as_empty() {
 }
 
 #[tokio::test]
-async fn a_cached_directory_the_provider_cannot_inspect_is_skipped() {
+async fn a_cached_directory_the_provider_declines_is_skipped_for_the_next_one() {
+    // A cache holds leftovers as well as installs. One directory the provider
+    // does not recognise must not stop the scan before the one it does.
+    let scratch = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(scratch.path().join("aaa-not-a-toolchain")).unwrap();
+    std::fs::create_dir_all(scratch.path().join("bbb-toolchain/bin")).unwrap();
+    std::fs::write(scratch.path().join("bbb-toolchain/bin/tool"), b"").unwrap();
+
+    let mut settings = settings(scratch.path());
+    settings.prefer_system = false;
+
+    let provider = Arc::new(
+        StubProvider::new(Language::nodejs())
+            .with_layout_when_present("bin/tool", layout("1.0.0", "/installed")),
+    );
+    let found = resolver_over(provider)
+        .resolve(&ResolveRequest::probe(Language::nodejs(), settings))
+        .await
+        .expect("the scan completes")
+        .expect("the real install is found");
+    assert_eq!(found.source, RuntimeSource::Managed);
+}
+
+#[tokio::test]
+async fn a_cached_directory_the_provider_errors_on_is_skipped() {
+    // An unreadable leftover must not abort the scan.
+    let scratch = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(scratch.path().join("toolchain-1.0.0")).unwrap();
+
+    let mut settings = settings(scratch.path());
+    settings.prefer_system = false;
+
+    let provider = Arc::new(StubProvider::new(Language::nodejs()).with_failing_layout());
+    let found = resolver_over(provider)
+        .resolve(&ResolveRequest::probe(Language::nodejs(), settings))
+        .await
+        .expect("a provider that cannot inspect is not a fatal scan");
+    assert!(found.is_none());
+}
+
+#[tokio::test]
+async fn a_provider_that_is_down_entirely_fails_the_resolution() {
     // One unreadable leftover must not abort the scan and hide the install
     // sitting next to it.
     let scratch = tempfile::tempdir().unwrap();

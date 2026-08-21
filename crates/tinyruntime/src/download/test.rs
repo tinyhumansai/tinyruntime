@@ -161,9 +161,14 @@ async fn a_transfer_that_ends_early_is_reported_and_the_partial_file_removed() {
 
     let scratch = tempfile::tempdir().unwrap();
     let target = scratch.path().join("toolchain.tar.gz");
-    let error = fetch(&Client::new(), &distribution(&url), &target, &Language::nodejs())
-        .await
-        .expect_err("a truncated transfer is not an archive");
+    let error = fetch(
+        &Client::new(),
+        &distribution(&url),
+        &target,
+        &Language::nodejs(),
+    )
+    .await
+    .expect_err("a truncated transfer is not an archive");
 
     let Error::Download { reason, .. } = &error else {
         panic!("got {error:?}");

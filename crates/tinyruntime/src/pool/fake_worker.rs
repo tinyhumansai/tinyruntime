@@ -24,7 +24,19 @@ use super::protocol::{Handshake, JobRequest, JobResponse};
 use super::worker::Launch;
 
 /// Set in a worker's environment to make the test binary serve instead of test.
+///
+/// The value selects how it misbehaves: `"1"` serves normally, `"silent"`
+/// connects and closes without a handshake, and `"garbage"` sends something that
+/// is not a handshake at all.
 pub(crate) const WORKER_MARKER: &str = "TINYRUNTIME_TEST_WORKER";
+
+/// Whether the worker should stay alive after its protocol stream closes.
+///
+/// The distinction matters to the pool: a parked worker whose *process* exited
+/// is noticed before the next job is written, while one whose *socket* died with
+/// the process still running is only discovered by the write failing. Those take
+/// different paths, and both need a worker that behaves that way on purpose.
+static LINGER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// How long the `hang` directive stays silent. Longer than any deadline a test
 /// sets, so the pool's grace is what ends the wait.
@@ -52,8 +64,12 @@ pub(crate) enum Directive<'a> {
     Misaddressed(&'a str),
     /// Emit an unparseable line before the real reply.
     Noise(&'a str),
-    /// Reply, then stop serving — a worker that dies while parked between jobs.
+    /// Reply, then stop serving and exit — a worker whose process dies while
+    /// parked between jobs.
     ExitAfterReply,
+    /// Reply, then close the protocol stream but keep the process alive — a
+    /// worker whose socket died without its process noticing.
+    Linger,
     /// Write to the process's own stdout before replying, so the pool's drain of
     /// the child's file descriptors has something to read.
     Print(&'a str),
@@ -72,9 +88,20 @@ impl Directive<'_> {
             Self::Misaddressed(text) => format!("misaddressed:{text}"),
             Self::Noise(text) => format!("noise:{text}"),
             Self::ExitAfterReply => "exit-after-reply".to_string(),
+            Self::Linger => "linger".to_string(),
             Self::Print(text) => format!("print:{text}"),
         }
     }
+}
+
+/// A launch that runs this test binary as a worker misbehaving in `mode`.
+pub(crate) fn launch_with_mode(language: tinyruntime_bus::Language, mode: &str) -> Launch {
+    let mut launch = launch(language);
+    launch.env.retain(|(name, _)| name != WORKER_MARKER);
+    launch
+        .env
+        .push((WORKER_MARKER.to_string(), mode.to_string()));
+    launch
 }
 
 /// A launch that runs this test binary as a worker.
@@ -109,10 +136,30 @@ pub(crate) fn launch(language: tinyruntime_bus::Language) -> Launch {
 fn serve() {
     let address = std::env::var("TINYRUNTIME_PROTOCOL_ADDR").expect("the pool supplies an address");
     let token = std::env::var("TINYRUNTIME_PROTOCOL_TOKEN").ok();
+    let mode = std::env::var(WORKER_MARKER).unwrap_or_default();
 
     let stream = TcpStream::connect(address).expect("the pool is listening");
+
+    // Two ways to be a worker the pool must refuse, both of which a real harness
+    // can be after a bad build.
+    if mode == "silent" {
+        return;
+    }
+    if mode == "garbage" {
+        let mut writer = stream.try_clone().expect("the socket clones");
+        send(&mut writer, "not a handshake at all");
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        return;
+    }
+
     let writer = stream.try_clone().expect("the socket clones");
     serve_on(BufReader::new(stream), writer, token);
+
+    if LINGER.load(std::sync::atomic::Ordering::SeqCst) {
+        // The protocol stream is gone, but the process is not: the pool should
+        // only find out when it writes the next job.
+        std::thread::sleep(HANG_FOR);
+    }
 }
 
 /// The protocol loop, over any duplex.
@@ -214,6 +261,11 @@ fn handle(writer: &mut impl Write, request: &JobRequest) -> bool {
         }
         "exit-after-reply" => {
             send(writer, &serde_json::to_string(&reply).expect("encodes"));
+            return false;
+        }
+        "linger" => {
+            send(writer, &serde_json::to_string(&reply).expect("encodes"));
+            LINGER.store(true, std::sync::atomic::Ordering::SeqCst);
             return false;
         }
         _ => reply.stdout = request.code.clone(),

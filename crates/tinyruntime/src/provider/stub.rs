@@ -38,6 +38,8 @@ pub(crate) struct StubProvider {
     pub(crate) selections: AtomicUsize,
     /// How many times the host was probed for an existing toolchain.
     pub(crate) detections: AtomicUsize,
+    /// Fail every `layout` call, as a provider that cannot inspect a directory.
+    layout_fails: Mutex<bool>,
 }
 
 impl StubProvider {
@@ -55,6 +57,7 @@ impl StubProvider {
             harness: Mutex::new(None),
             selections: AtomicUsize::new(0),
             detections: AtomicUsize::new(0),
+            layout_fails: Mutex::new(false),
         }
     }
 
@@ -90,6 +93,12 @@ impl StubProvider {
     /// Supply `harness` when the router asks how to launch a worker.
     pub(crate) fn with_harness(self, harness: WorkerHarness) -> Self {
         *self.harness.lock().expect("uncontended in tests") = Some(harness);
+        self
+    }
+
+    /// Fail every `layout` call, as a provider that cannot inspect a directory.
+    pub(crate) fn with_failing_layout(self) -> Self {
+        *self.layout_fails.lock().expect("uncontended in tests") = true;
         self
     }
 

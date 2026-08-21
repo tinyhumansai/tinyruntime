@@ -467,6 +467,8 @@ async fn the_reaper_retires_idle_workers_and_stops_when_the_pool_is_dropped() {
     // holds only a weak reference, so it must stop rather than keep it alive.
     let weak = std::sync::Arc::downgrade(&pool);
     super::lang_pool::spawn_reaper(weak.clone(), Duration::from_millis(20));
+    // Let at least one iteration run against a live pool before dropping it.
+    tokio::time::sleep(Duration::from_millis(80)).await;
     drop(pool);
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert_eq!(weak.strong_count(), 0, "the reaper kept the pool alive");
@@ -481,4 +483,93 @@ async fn a_worker_describes_what_it_serves_rather_than_its_descriptors() {
     assert!(rendered.contains("nodejs"), "got {rendered}");
     assert!(rendered.contains("jobs_done"), "got {rendered}");
     worker.shutdown();
+}
+
+#[tokio::test]
+async fn a_worker_whose_socket_died_fails_the_job_terminally() {
+    // A graceful close leaves the socket writable, so the write succeeds and the
+    // failure surfaces at the read — by which point the job counts as
+    // dispatched. That is why the parked-worker case is caught *before* the
+    // write, by checking whether the process has exited, rather than by retrying
+    // here.
+    let pool = live_pool(1);
+    run(&pool, &Directive::Linger, None)
+        .await
+        .expect("the first job runs, then the stream closes");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let error = run(&pool, &Directive::Echo("second"), None)
+        .await
+        .expect_err("a dead stream cannot carry a reply");
+    assert!(matches!(error, Error::PostDispatch { .. }), "got {error:?}");
+    assert!(
+        !error.is_retryable(),
+        "a job that may have run must never be retried"
+    );
+}
+
+#[tokio::test]
+async fn a_worker_that_cannot_be_started_fails_the_job_retryably() {
+    let mut spec = fake_worker::launch(Language::nodejs());
+    spec.binary = "/nonexistent/interpreter".into();
+    let pool = LangPool::start(spec, PoolSettings::default(), "1.0.0-test".to_string());
+
+    let error = pool
+        .run(Directive::Echo("x").code(), None, None)
+        .await
+        .expect_err("a missing interpreter cannot run anything");
+    assert!(matches!(error, Error::PreDispatch { .. }), "got {error:?}");
+    assert!(error.is_retryable());
+}
+
+#[tokio::test]
+async fn a_worker_that_never_hands_over_a_handshake_is_refused() {
+    let spec = fake_worker::launch_with_mode(Language::nodejs(), "silent");
+    let pool = LangPool::start(spec, PoolSettings::default(), "1.0.0-test".to_string());
+
+    let error = pool
+        .run(Directive::Echo("x").code(), None, None)
+        .await
+        .expect_err("a worker that says nothing is not ready");
+    assert!(matches!(error, Error::PreDispatch { .. }), "got {error:?}");
+    assert!(
+        error.to_string().contains("handshake") || error.to_string().contains("exited"),
+        "got `{error}`"
+    );
+}
+
+#[tokio::test]
+async fn a_worker_whose_handshake_is_not_one_is_refused() {
+    let spec = fake_worker::launch_with_mode(Language::nodejs(), "garbage");
+    let pool = LangPool::start(spec, PoolSettings::default(), "1.0.0-test".to_string());
+
+    let error = pool
+        .run(Directive::Echo("x").code(), None, None)
+        .await
+        .expect_err("an unparseable handshake is not a handshake");
+    assert!(matches!(error, Error::PreDispatch { .. }), "got {error:?}");
+    assert!(error.to_string().contains("handshake"), "got `{error}`");
+}
+
+#[tokio::test]
+async fn a_pool_that_never_reaps_leaves_its_workers_alone() {
+    let settings = PoolSettings::default()
+        .with_max_workers(1)
+        .with_idle_ttl_secs(0)
+        .with_recycle_after_jobs(0);
+    let pool = LangPool::start(
+        fake_worker::launch(Language::nodejs()),
+        settings,
+        "1.0.0-test".to_string(),
+    );
+
+    run(&pool, &Directive::Echo("x"), None)
+        .await
+        .expect("the job runs");
+    pool.reap().await;
+    assert_eq!(
+        pool.stats().await.idle_workers,
+        1,
+        "a pool with reaping disabled retired a worker anyway"
+    );
 }

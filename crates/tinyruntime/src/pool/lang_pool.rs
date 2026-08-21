@@ -179,14 +179,17 @@ impl LangPool {
         )
     }
 
-    /// Submit on a warm or fresh worker, respawning once if the job provably
-    /// never left.
+    /// Submit on a warm or fresh worker.
     ///
-    /// The retry is allowed exactly once and exactly for a pre-dispatch failure.
-    /// A parked worker can die between jobs, and refusing to retry that would
-    /// turn an idle timeout on the far side into a user-visible failure — but a
-    /// failure after the request went out may mean the job already ran, and
-    /// running it again could duplicate whatever it did.
+    /// There is deliberately no retry here. The case a retry would be for — a
+    /// parked worker that died between jobs — is caught before dispatch by
+    /// [`Worker::has_exited`], and it has to be: a graceful close leaves the
+    /// socket writable, so a write to a dead peer *succeeds* and the failure
+    /// only surfaces at the read. By then the job counts as dispatched and must
+    /// never be re-run, because it may have executed.
+    ///
+    /// A failure that is genuinely pre-dispatch is still reported as such, so a
+    /// caller may fall back to its own per-call spawn.
     async fn dispatch(
         &self,
         request: &JobRequest,
@@ -195,22 +198,6 @@ impl LangPool {
         let mut worker = self.take_or_spawn().await?;
         match worker.submit(request, hard_deadline).await {
             Ok(response) => Ok((response, worker)),
-            Err(failure) if !failure.dispatched => {
-                tracing::warn!(
-                    language = self.launch.language.as_str(),
-                    "[tinyruntime::pool] the job never left ({}); respawning once",
-                    failure.reason
-                );
-                worker.shutdown();
-                let mut fresh = self.spawn().await?;
-                match fresh.submit(request, hard_deadline).await {
-                    Ok(response) => Ok((response, fresh)),
-                    Err(second) => {
-                        fresh.shutdown();
-                        Err(self.dispatch_error(&second))
-                    }
-                }
-            }
             Err(failure) => {
                 worker.shutdown();
                 Err(self.dispatch_error(&failure))
