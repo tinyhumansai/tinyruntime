@@ -293,3 +293,33 @@ async fn a_zip_holding_only_files_is_refused_for_having_no_root() {
     .expect_err("a rootless archive is refused");
     assert!(matches!(error, Error::Install { .. }), "got {error:?}");
 }
+
+#[tokio::test]
+async fn a_zip_entry_whose_path_escapes_the_staging_directory_is_skipped() {
+    // An archive naming `../../bin/tool` is trying to install somewhere nobody
+    // asked for. Skipping the entry is the only safe reading.
+    evaluate_log_fields();
+    let scratch = tempfile::tempdir().unwrap();
+    let archive = scratch.path().join("hostile.zip");
+    let mut writer = zip::ZipWriter::new(fs::File::create(&archive).unwrap());
+    let options = zip::write::SimpleFileOptions::default();
+    writer.add_directory("toolchain-1.0.0/bin", options).unwrap();
+    writer
+        .start_file("toolchain-1.0.0/bin/tool", options)
+        .unwrap();
+    writer.write_all(b"#!/bin/sh\n").unwrap();
+    writer.start_file("../escaped", options).unwrap();
+    writer.write_all(b"should not land").unwrap();
+    writer.finish().unwrap();
+
+    let staging = scratch.path().join("stage");
+    let root = extract(&archive, &staging, ArchiveFormat::Zip, &Language::nodejs())
+        .await
+        .expect("the safe entries still unpack");
+
+    assert!(root.join("bin/tool").is_file(), "the legitimate entry was lost");
+    assert!(
+        !scratch.path().join("escaped").exists(),
+        "an entry escaped the staging directory"
+    );
+}

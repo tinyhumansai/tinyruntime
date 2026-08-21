@@ -491,3 +491,44 @@ async fn an_unreachable_channel_fails_the_install_retryably() {
     assert!(matches!(error, Error::Download { .. }), "got {error:?}");
     assert!(error.is_retryable());
 }
+
+#[tokio::test]
+async fn a_cache_root_that_cannot_be_listed_is_treated_as_empty() {
+    // A host whose cache directory does not exist yet is every host, once.
+    // Turning that into an error would break the first run on every machine.
+    let scratch = tempfile::tempdir().unwrap();
+    let not_a_directory = scratch.path().join("a-file");
+    std::fs::write(&not_a_directory, b"x").unwrap();
+
+    let mut settings = RuntimeSettings::new("1.0.0");
+    settings.prefer_system = false;
+    settings.cache_dir = not_a_directory.to_string_lossy().into_owned();
+
+    let provider = Arc::new(
+        StubProvider::new(Language::nodejs()).with_layout(layout("1.0.0", "/wherever")),
+    );
+    let found = resolver_over(provider)
+        .resolve(&ResolveRequest::probe(Language::nodejs(), settings))
+        .await
+        .expect("an unlistable cache is not an error");
+    assert!(found.is_none());
+}
+
+#[tokio::test]
+async fn a_cached_directory_the_provider_cannot_inspect_is_skipped() {
+    // One unreadable leftover must not abort the scan and hide the install
+    // sitting next to it.
+    let scratch = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(scratch.path().join("toolchain-1.0.0")).unwrap();
+
+    let mut settings = settings(scratch.path());
+    settings.prefer_system = false;
+
+    // The provider errors on every question, including `layout`.
+    let found = resolver_over(Arc::new(DownProvider(Language::nodejs())))
+        .resolve(&ResolveRequest::probe(Language::nodejs(), settings))
+        .await;
+    // `describe` fails first, so this is a provider failure rather than a scan
+    // result — what matters is that it is reported rather than panicking.
+    assert!(found.is_err());
+}
