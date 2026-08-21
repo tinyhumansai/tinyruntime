@@ -25,13 +25,23 @@ fn install_dir_name_drops_the_archive_extension() {
 fn install_dir_name_survives_an_unexpected_archive_name() {
     // A channel that names an archive without the extension the format implies
     // must not produce an empty install directory.
-    let dist = Distribution::new("1.0.0", "toolchain", "https://example.invalid/t", ArchiveFormat::Zip);
+    let dist = Distribution::new(
+        "1.0.0",
+        "toolchain",
+        "https://example.invalid/t",
+        ArchiveFormat::Zip,
+    );
     assert_eq!(dist.install_dir_name, "toolchain");
 }
 
 #[test]
 fn a_distribution_without_a_digest_says_so() {
-    let dist = Distribution::new("1.0.0", "t.zip", "https://example.invalid/t.zip", ArchiveFormat::Zip);
+    let dist = Distribution::new(
+        "1.0.0",
+        "t.zip",
+        "https://example.invalid/t.zip",
+        ArchiveFormat::Zip,
+    );
     assert!(dist.expected_sha256.is_none());
     assert_eq!(
         dist.with_sha256("ab".repeat(32)).expected_sha256.as_deref(),
@@ -41,13 +51,21 @@ fn a_distribution_without_a_digest_says_so() {
 
 #[test]
 fn builders_override_the_derived_directory_and_add_headers() {
-    let dist = Distribution::new("3.12.4", "cpython.tar.gz", "https://example.invalid/c", ArchiveFormat::TarGz)
-        .with_install_dir_name("cpython-3.12.4")
-        .with_header("Accept", "application/vnd.github+json");
+    let dist = Distribution::new(
+        "3.12.4",
+        "cpython.tar.gz",
+        "https://example.invalid/c",
+        ArchiveFormat::TarGz,
+    )
+    .with_install_dir_name("cpython-3.12.4")
+    .with_header("Accept", "application/vnd.github+json");
     assert_eq!(dist.install_dir_name, "cpython-3.12.4");
     assert_eq!(
         dist.headers,
-        vec![("Accept".to_string(), "application/vnd.github+json".to_string())]
+        vec![(
+            "Accept".to_string(),
+            "application/vnd.github+json".to_string()
+        )]
     );
 }
 
@@ -57,7 +75,11 @@ fn a_layout_addresses_executables_by_logical_name() {
         .with_executable("node", "/cache/node/bin/node")
         .with_executable("npm", "/cache/node/bin/npm");
     assert_eq!(layout.executable("node"), Some("/cache/node/bin/node"));
-    assert_eq!(layout.executable("npx"), None, "an absent tool is absent, not guessed");
+    assert_eq!(
+        layout.executable("npx"),
+        None,
+        "an absent tool is absent, not guessed"
+    );
 }
 
 #[test]
@@ -66,13 +88,21 @@ fn a_descriptor_reports_the_contract_it_was_built_against() {
         .with_executable("node")
         .with_executable("npm");
     assert_eq!(descriptor.contract_version, CONTRACT_VERSION);
-    assert_eq!(descriptor.executables, vec!["node".to_string(), "npm".to_string()]);
+    assert_eq!(
+        descriptor.executables,
+        vec!["node".to_string(), "npm".to_string()]
+    );
 }
 
 #[test]
 fn the_distribution_wire_form_is_pinned() {
-    let dist = Distribution::new("1.2.3", "t.tar.gz", "https://example.invalid/t.tar.gz", ArchiveFormat::TarGz)
-        .with_sha256("cd".repeat(32));
+    let dist = Distribution::new(
+        "1.2.3",
+        "t.tar.gz",
+        "https://example.invalid/t.tar.gz",
+        ArchiveFormat::TarGz,
+    )
+    .with_sha256("cd".repeat(32));
     let value = serde_json::to_value(&dist).expect("distribution serialises");
     assert_eq!(value["format"], serde_json::json!("tar_gz"));
     assert_eq!(value["install_dir_name"], serde_json::json!("t"));

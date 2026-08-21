@@ -114,8 +114,9 @@ pub mod version;
 pub use exec::{ExecRequest, ExecResponse};
 pub use harness::{WORKER_PROTOCOL_VERSION, WorkerHarness};
 pub use language::{Language, NODEJS, PYTHON};
-pub use names::{INTERFACE, METHODS, OBJECT_PATH, PROVIDER_INTERFACE, PROVIDER_METHODS,
-    PROVIDER_OBJECT_PATH};
+pub use names::{
+    INTERFACE, METHODS, OBJECT_PATH, PROVIDER_INTERFACE, PROVIDER_METHODS, PROVIDER_OBJECT_PATH,
+};
 pub use pool::{PoolSettings, PoolStats, PoolStatsResponse};
 pub use provision::{
     ArchiveFormat, Distribution, LayoutRequest, LayoutResponse, ProviderDescriptor, RuntimeLayout,

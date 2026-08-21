@@ -18,10 +18,17 @@ fn a_probe_forbids_installing() {
 
 #[test]
 fn a_resolution_carries_the_layout_it_was_built_from() {
-    let runtime = ResolvedRuntime::from_layout(Language::nodejs(), RuntimeSource::Managed, layout());
+    let runtime =
+        ResolvedRuntime::from_layout(Language::nodejs(), RuntimeSource::Managed, layout());
     assert_eq!(runtime.version, "22.11.0");
-    assert_eq!(runtime.executable("node"), Some("/cache/node-v22.11.0/bin/node"));
-    assert_eq!(runtime.install_dir, None, "the directory is recorded separately");
+    assert_eq!(
+        runtime.executable("node"),
+        Some("/cache/node-v22.11.0/bin/node")
+    );
+    assert_eq!(
+        runtime.install_dir, None,
+        "the directory is recorded separately"
+    );
 }
 
 #[test]

@@ -98,5 +98,9 @@ impl RuntimeSettings {
 /// "set to empty" are the same thing to the person editing the file.
 fn non_empty(value: &str) -> Option<&str> {
     let trimmed = value.trim();
-    if trimmed.is_empty() { None } else { Some(trimmed) }
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
 }

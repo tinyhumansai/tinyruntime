@@ -34,3 +34,13 @@ fn serialises_as_a_bare_string() {
 fn displays_as_its_identifier() {
     assert_eq!(Language::nodejs().to_string(), "nodejs");
 }
+
+#[test]
+fn decoding_normalises_the_same_way_the_constructor_does() {
+    // Not a restatement of the constructor test: a derived transparent decode
+    // would skip normalisation entirely and route a valid request nowhere.
+    let decoded: Language =
+        serde_json::from_value(serde_json::json!("  PYTHON  ")).expect("language decodes");
+    assert_eq!(decoded, Language::python());
+    assert_eq!(decoded.as_str(), "python");
+}

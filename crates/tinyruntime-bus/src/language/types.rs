@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// The identifier the Node.js provider answers to.
 pub const NODEJS: &str = "nodejs";
@@ -24,9 +24,25 @@ pub const PYTHON: &str = "python";
 /// assert_eq!(Language::nodejs().as_str(), "nodejs");
 /// assert_eq!(Language::new(" Python ").as_str(), "python");
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
 pub struct Language(String);
+
+/// Decoding normalises exactly as [`Language::new`] does.
+///
+/// Deriving this would not: a derived `transparent` implementation hands the raw
+/// string straight to the newtype, so a peer that spelled `"NodeJS"` on the wire
+/// would arrive as an identifier no provider is registered under and fail to
+/// route. Normalising on the way in is what makes the constructor's promise hold
+/// for values that never went through the constructor.
+impl<'de> Deserialize<'de> for Language {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Self::new(String::deserialize(deserializer)?))
+    }
+}
 
 impl Language {
     /// Builds a language identifier, trimmed and lowercased.
