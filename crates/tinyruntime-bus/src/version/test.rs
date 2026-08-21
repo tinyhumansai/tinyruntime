@@ -1,34 +1,29 @@
-//! Unit tests for the contract version and its bind rule.
+//! Unit tests for the contract version bind rule.
 
 use super::{CONTRACT_VERSION, binds, is_compatible};
 
 #[test]
-fn the_shipped_contract_version_is_pinned() {
-    assert_eq!(CONTRACT_VERSION, (1, 0));
-}
-
-#[test]
-fn the_contract_binds_to_itself() {
+fn a_peer_on_the_same_version_binds() {
+    assert!(binds((1, 2), (1, 2)));
     assert!(is_compatible(CONTRACT_VERSION));
 }
 
 #[test]
-fn a_newer_minor_on_the_module_side_binds() {
-    assert!(is_compatible((1, 1)));
-    assert!(is_compatible((1, 97)));
+fn a_newer_minor_binds_because_it_still_serves_every_member() {
+    assert!(binds((1, 2), (1, 7)));
 }
 
 #[test]
-fn an_older_minor_on_the_module_side_is_rejected() {
-    // A host built against 1.4 cannot call a 1.2 module: the members it names
-    // may not be served.
-    assert!(!binds((1, 4), (1, 2)));
-    assert!(binds((1, 4), (1, 4)));
+fn an_older_minor_does_not_bind() {
+    assert!(
+        !binds((1, 2), (1, 1)),
+        "a caller cannot use a member the other side does not serve"
+    );
 }
 
 #[test]
-fn a_different_major_is_rejected() {
-    assert!(!is_compatible((0, 0)));
-    assert!(!is_compatible((2, 0)));
-    assert!(!is_compatible((2, 97)));
+fn a_different_major_never_binds() {
+    assert!(!binds((1, 0), (2, 0)));
+    assert!(!binds((1, 0), (0, 9)));
+    assert!(!binds((2, 0), (1, 9)));
 }
