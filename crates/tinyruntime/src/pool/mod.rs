@@ -14,7 +14,7 @@
 //! - [`protocol`] — the newline-delimited framing, on its own socket so a job's
 //!   own output can never be mistaken for a protocol frame.
 //! - [`worker`] — one warm child and the rules for trusting it.
-//! - [`env`] — the allow-listed environment and the harness on disk.
+//! - [`env`](mod@env) — the allow-listed environment and the harness on disk.
 //! - `lang_pool` — the bounded pool: permits, backpressure, recycling, reaping.
 //!
 //! The registry below keys a pool by its launch fingerprint, so retuning the
