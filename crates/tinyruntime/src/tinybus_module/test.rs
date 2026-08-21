@@ -58,8 +58,35 @@ impl FakeProvider {
     }
 }
 
+/// A second provider, so the two cannot be confused for one another.
+struct OtherFakeProvider;
+
+#[tinybus::interface(name = "ai.tinyhumans.runtime.Provider")]
+impl OtherFakeProvider {
+    async fn describe(&self) -> TinyBusResult<ProviderDescriptor> {
+        std::future::ready(Ok(ProviderDescriptor::new(
+            Language::python(),
+            "Fake Python",
+            "3.12",
+        )))
+        .await
+    }
+
+    async fn detect_system(&self, _settings: RuntimeSettings) -> TinyBusResult<LayoutResponse> {
+        std::future::ready(Ok(LayoutResponse::missing())).await
+    }
+
+    async fn layout(&self, _request: LayoutRequest) -> TinyBusResult<LayoutResponse> {
+        std::future::ready(Ok(LayoutResponse::missing())).await
+    }
+
+    async fn harness(&self) -> TinyBusResult<WorkerHarness> {
+        std::future::ready(Ok(WorkerHarness::new("pool_worker.py", "# harness", "python"))).await
+    }
+}
+
 /// The bus name the fake provider claims in these tests.
-const FAKE_BUS_NAME: &str = "ai.tinyhumans.runtime.nodejs.Provider";
+const FAKE_BUS_NAME: &str = names::providers::NODEJS;
 
 /// Start a broker and return a bus every peer in a test connects through.
 fn bus() -> MemoryBus {
@@ -139,7 +166,7 @@ async fn a_provider_module_on_the_bus_is_listed_as_available() -> TinyBusResult<
 
     let provider = Connection::connect(bus.connect().await?).await?;
     provider
-        .serve_at(names::providers::NODEJS_OBJECT_PATH.try_into()?, FakeProvider)
+        .serve_at(names::object_path_for(FAKE_BUS_NAME).as_str().try_into()?, FakeProvider)
         .await?;
     provider.request_name(FAKE_BUS_NAME).await?;
 
@@ -171,7 +198,7 @@ async fn resolve_routes_to_a_provider_module() -> TinyBusResult<()> {
 
     let provider = Connection::connect(bus.connect().await?).await?;
     provider
-        .serve_at(names::providers::NODEJS_OBJECT_PATH.try_into()?, FakeProvider)
+        .serve_at(names::object_path_for(FAKE_BUS_NAME).as_str().try_into()?, FakeProvider)
         .await?;
     provider.request_name(FAKE_BUS_NAME).await?;
 
@@ -245,5 +272,65 @@ async fn pool_stats_are_empty_before_anything_runs() -> TinyBusResult<()> {
         proxy.call(names::methods::POOL_STATS, ()).await?;
 
     assert!(reply.pools.is_empty(), "a pool existed before any job ran");
+    Ok(())
+}
+
+#[tokio::test]
+async fn each_provider_is_addressed_at_its_own_object_path() -> TinyBusResult<()> {
+    // The bug this rules out: addressing every provider at one shared path.
+    // `tinybus_module!` derives a module's manifest path from its bus name, so a
+    // provider serving at a shared path would ship a manifest that disagreed
+    // with the object it exports — and a router addressing one would reach the
+    // wrong object, or none. Two providers here, each at its own derived path.
+    let bus = bus();
+    let scratch = tempfile::tempdir().unwrap();
+
+    let node = Connection::connect(bus.connect().await?).await?;
+    node.serve_at(
+        names::object_path_for(names::providers::NODEJS)
+            .as_str()
+            .try_into()?,
+        FakeProvider,
+    )
+    .await?;
+    node.request_name(names::providers::NODEJS).await?;
+
+    let python = Connection::connect(bus.connect().await?).await?;
+    python
+        .serve_at(
+            names::object_path_for(names::providers::PYTHON)
+                .as_str()
+                .try_into()?,
+            OtherFakeProvider,
+        )
+        .await?;
+    python.request_name(names::providers::PYTHON).await?;
+
+    let module = Connection::connect(bus.connect().await?).await?;
+    setup(
+        module.clone(),
+        ModuleConfig {
+            providers: vec![
+                ProviderRoute::new(Language::nodejs(), names::providers::NODEJS),
+                ProviderRoute::new(Language::python(), names::providers::PYTHON),
+            ],
+            harness_dir: scratch.path().to_string_lossy().into_owned(),
+        },
+    )
+    .await?;
+
+    let client = Connection::connect(bus.connect().await?).await?;
+    let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    let reply: LanguagesResponse = proxy.call(names::methods::LANGUAGES, ()).await?;
+
+    assert_eq!(reply.languages.len(), 2);
+    assert!(reply.languages[0].available, "{:?}", reply.languages[0].detail);
+    assert_eq!(reply.languages[0].display_name.as_deref(), Some("Fake Node.js"));
+    assert!(reply.languages[1].available, "{:?}", reply.languages[1].detail);
+    assert_eq!(
+        reply.languages[1].display_name.as_deref(),
+        Some("Fake Python"),
+        "the router reached the wrong provider's object"
+    );
     Ok(())
 }
