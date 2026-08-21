@@ -134,8 +134,6 @@ async fn a_fresh_pool_reports_no_work_done() {
 
 use std::time::Duration;
 
-use tinyruntime_bus::Language;
-
 use super::fake_worker::{self, Directive};
 use super::lang_pool::LangPool;
 use crate::error::Error;
