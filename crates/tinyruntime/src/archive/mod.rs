@@ -62,13 +62,10 @@ pub async fn extract(
             ArchiveFormat::Zip => extract::zip(&archive, &staging_dir),
             // Only reachable from a provider on a newer contract, which the
             // router refuses long before here — but `ArchiveFormat` is
-            // `#[non_exhaustive]`, so the arm must exist and must not panic.
-            _ => {
-                return Err(Error::Install {
-                    language: owned,
-                    reason: UNKNOWN_FORMAT.into(),
-                });
-            }
+            // `#[non_exhaustive]`, so the arm must exist and must not panic. It
+            // joins the same error mapping as every other arm rather than
+            // returning early, which keeps it to a single line.
+            _ => Err(io::Error::other(UNKNOWN_FORMAT)),
         };
         unpacked.map_err(|error| install_error(&owned, &error))?;
         single_root(&staging_dir).map_err(|reason| Error::Install {
