@@ -4,9 +4,12 @@ This file is the single source of truth for how humans and coding agents work
 in this repository. `CLAUDE.md` is a symlink to this file, so every agent reads
 the same instructions.
 
-When you generate a new project from this template, keep this file and adapt
-the project-specific parts (crate name, module map, feature flags, commands).
-Delete guidance that no longer applies rather than leaving it to rot.
+`tinyruntime` is the runtime **router**: a TinyBus module that resolves a
+language runtime, downloads and installs one when the host has none, reuses one
+when it does, and runs code on a bounded pool of warm interpreter processes. The
+language-specific knowledge lives in provider modules, not here — see
+"The router and its providers" below before adding anything that names a
+language.
 
 ## Project Structure
 
@@ -138,8 +141,8 @@ Supporting commands:
 
 - `cargo fmt --all` — format before committing.
 - `cargo test <filter>` — run a focused subset while iterating.
-- `cargo test -p template-bus` — run one crate's suite.
-- `cargo run -p template --example basic` — run the bundled example.
+- `cargo test -p tinyruntime-bus` — run one crate's suite.
+- `cargo run -p tinyruntime --example basic` — run the bundled example.
 - `cargo doc --no-deps --all-features` — build the rustdoc CI also builds with
   `RUSTDOCFLAGS="-D warnings"`.
 - `cargo test --doc` — run doctests alone when editing documentation examples.
@@ -190,7 +193,7 @@ add one:
 - gate anything optional behind a Cargo feature, documented in `Cargo.toml`;
 - declare it once in the root `[workspace.dependencies]` when more than one
   crate needs it, and take it with `{ workspace = true }`;
-- never add one to `crates/template-bus` that pulls in a transport, an async
+- never add one to `crates/tinyruntime-bus` that pulls in a transport, an async
   runtime, an HTTP client, or a native library — CI fails the build if you do;
 - leave a comment above the entry explaining *why* the crate is needed and what
   uses it — see the existing entries for the expected tone;
@@ -218,6 +221,10 @@ new module capability requires more.
 
 - Module-local unit tests live in `crates/<crate>/src/<feature>/test.rs` and may
   touch private items.
+- The router is testable without a bus. `crates/tinyruntime/src/provider/stub.rs`
+  answers the five provider questions from memory, so resolution, reuse, install,
+  and execution are exercised without a second module, a release channel, or a
+  network. Reach for it before reaching for a real provider.
 - Integration tests live in `crates/<crate>/tests/` and exercise only the public
   API — they are the regression suite for the crate's contract.
 - Payload types pin their serde representation in a unit test. That
@@ -300,7 +307,7 @@ Releases run from `.github/workflows/release.yml` via a manual
 an interrupted release after its version commit and tag exist. The workflow
 re-runs the full validation suite, computes the next version, updates
 the root `[workspace.package]` version and `Cargo.lock`, commits and tags
-`vX.Y.Z`, builds `crates/template` as a TinyBus module for every supported
+`vX.Y.Z`, builds `crates/tinyruntime` as a TinyBus module for every supported
 platform, pushes, and creates an immutable GitHub release with installable
 native packages.
 
