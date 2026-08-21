@@ -80,6 +80,8 @@ pub mod pool;
 pub mod provider;
 pub mod resolve;
 pub mod store;
+#[cfg(test)]
+mod testing;
 
 mod tinybus_module;
 
