@@ -14,7 +14,7 @@
 //! the real work runs on a blocking thread rather than stalling the async
 //! runtime the module shares with the bus.
 
-use std::fs::{self, File};
+use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -51,14 +51,25 @@ pub async fn extract(
         "[tinyruntime::archive] unpacking toolchain archive"
     );
 
+    let reported = language.clone();
     let joined = tokio::task::spawn_blocking(move || -> Result<PathBuf> {
         fs::create_dir_all(&staging_dir).map_err(|error| install_error(&language, &error))?;
-        match format {
+        // A format this build does not know is a provider from a newer contract,
+        // which the router refuses long before here — but the payload type is
+        // `#[non_exhaustive]`, so the arm has to exist and must not panic.
+        let unpacked = match format {
             ArchiveFormat::TarGz => extract::tar_gz(&archive, &staging_dir),
             ArchiveFormat::TarXz => extract::tar_xz(&archive, &staging_dir),
             ArchiveFormat::Zip => extract::zip(&archive, &staging_dir),
-        }
-        .map_err(|error| install_error(&language, &error))?;
+            _ => {
+                return Err(Error::Install {
+                    language,
+                    reason: "the provider named an archive format this build cannot unpack"
+                        .to_string(),
+                });
+            }
+        };
+        unpacked.map_err(|error| install_error(&language, &error))?;
         single_root(&staging_dir).map_err(|reason| Error::Install {
             language: language.clone(),
             reason,
@@ -69,7 +80,7 @@ pub async fn extract(
     match joined {
         Ok(result) => result,
         Err(error) => Err(Error::Install {
-            language: language.clone(),
+            language: reported,
             reason: format!("the unpacking task did not finish: {error}"),
         }),
     }

@@ -102,6 +102,21 @@ impl ExecResponse {
         !self.timed_out && matches!(self.exit_code, None | Some(0))
     }
 
+    /// Records how long the job ran and how long it waited for a worker.
+    #[must_use]
+    pub fn with_timings(mut self, elapsed_ms: u64, queue_wait_ms: u64) -> Self {
+        self.elapsed_ms = elapsed_ms;
+        self.queue_wait_ms = queue_wait_ms;
+        self
+    }
+
+    /// Marks the job as aborted at its soft deadline.
+    #[must_use]
+    pub fn with_timed_out(mut self, timed_out: bool) -> Self {
+        self.timed_out = timed_out;
+        self
+    }
+
     /// Builds a response with zeroed timings.
     #[must_use]
     pub fn new(

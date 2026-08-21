@@ -157,10 +157,59 @@ pub struct LanguageStatus {
     pub detail: Option<String>,
 }
 
+impl LanguageStatus {
+    /// A language whose provider answered and can bind to this build.
+    #[must_use]
+    pub fn available(
+        language: Language,
+        bus_name: impl Into<String>,
+        display_name: impl Into<String>,
+    ) -> Self {
+        Self {
+            language,
+            bus_name: bus_name.into(),
+            available: true,
+            display_name: Some(display_name.into()),
+            detail: Some(String::new()).filter(|detail| !detail.is_empty()),
+        }
+    }
+
+    /// A language whose provider did not answer, or answered incompatibly.
+    #[must_use]
+    pub fn unavailable(
+        language: Language,
+        bus_name: impl Into<String>,
+        detail: impl Into<String>,
+    ) -> Self {
+        Self {
+            language,
+            bus_name: bus_name.into(),
+            available: false,
+            display_name: None,
+            detail: Some(detail.into()),
+        }
+    }
+
+    /// Records the provider's operator-facing name.
+    #[must_use]
+    pub fn with_display_name(mut self, display_name: impl Into<String>) -> Self {
+        self.display_name = Some(display_name.into());
+        self
+    }
+}
+
 /// The reply listing every language this router knows how to route.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct LanguagesResponse {
     /// One entry per registered provider, in registration order.
     pub languages: Vec<LanguageStatus>,
+}
+
+impl LanguagesResponse {
+    /// A reply carrying `languages`.
+    #[must_use]
+    pub fn new(languages: Vec<LanguageStatus>) -> Self {
+        Self { languages }
+    }
 }

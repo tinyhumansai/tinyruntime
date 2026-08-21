@@ -80,14 +80,16 @@ impl LangPool {
 
     /// This pool's counters.
     pub async fn stats(&self) -> PoolStats {
-        PoolStats {
-            language: self.launch.language.clone(),
-            jobs_total: self.jobs_total.load(Ordering::Relaxed),
-            worker_spawns: self.worker_spawns.load(Ordering::Relaxed),
-            rejected_saturated: self.rejected.load(Ordering::Relaxed),
-            idle_workers: self.idle.lock().await.len(),
-            max_workers: self.settings.effective_max_workers(),
-        }
+        PoolStats::new(
+            self.launch.language.clone(),
+            self.settings.effective_max_workers(),
+        )
+        .with_counts(
+            self.jobs_total.load(Ordering::Relaxed),
+            self.worker_spawns.load(Ordering::Relaxed),
+            self.rejected.load(Ordering::Relaxed),
+        )
+        .with_idle_workers(self.idle.lock().await.len())
     }
 
     /// Run one job, waiting for a free worker.
@@ -161,15 +163,17 @@ impl LangPool {
         elapsed: Duration,
         queue_wait: Duration,
     ) -> ExecResponse {
-        ExecResponse {
-            stdout: response.stdout,
-            stderr: response.stderr,
-            exit_code: response.exit_code,
-            timed_out: response.timed_out,
-            elapsed_ms: u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX),
-            queue_wait_ms: u64::try_from(queue_wait.as_millis()).unwrap_or(u64::MAX),
-            runtime_version: self.runtime_version.clone(),
-        }
+        ExecResponse::new(
+            response.stdout,
+            response.stderr,
+            response.exit_code,
+            self.runtime_version.clone(),
+        )
+        .with_timed_out(response.timed_out)
+        .with_timings(
+            u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX),
+            u64::try_from(queue_wait.as_millis()).unwrap_or(u64::MAX),
+        )
     }
 
     /// Submit on a warm or fresh worker, respawning once if the job provably

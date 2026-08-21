@@ -85,10 +85,54 @@ pub struct PoolStats {
     pub max_workers: usize,
 }
 
+impl PoolStats {
+    /// Zeroed counters for a pool that has done nothing yet.
+    #[must_use]
+    pub fn new(language: Language, max_workers: usize) -> Self {
+        Self {
+            language,
+            jobs_total: 0,
+            worker_spawns: 0,
+            rejected_saturated: 0,
+            idle_workers: 0,
+            max_workers,
+        }
+    }
+
+    /// Records what the pool has served.
+    #[must_use]
+    pub fn with_counts(
+        mut self,
+        jobs_total: u64,
+        worker_spawns: u64,
+        rejected_saturated: u64,
+    ) -> Self {
+        self.jobs_total = jobs_total;
+        self.worker_spawns = worker_spawns;
+        self.rejected_saturated = rejected_saturated;
+        self
+    }
+
+    /// Records how many warm workers are parked.
+    #[must_use]
+    pub fn with_idle_workers(mut self, idle_workers: usize) -> Self {
+        self.idle_workers = idle_workers;
+        self
+    }
+}
+
 /// The reply listing every live pool.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct PoolStatsResponse {
     /// One entry per language with a live pool.
     pub pools: Vec<PoolStats>,
+}
+
+impl PoolStatsResponse {
+    /// A reply carrying `pools`.
+    #[must_use]
+    pub fn new(pools: Vec<PoolStats>) -> Self {
+        Self { pools }
+    }
 }

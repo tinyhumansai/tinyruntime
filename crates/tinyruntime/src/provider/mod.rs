@@ -124,33 +124,28 @@ impl Route {
     pub async fn status(&self) -> LanguageStatus {
         match self.provider.describe().await {
             Ok(descriptor) if tinyruntime_bus::is_compatible(descriptor.contract_version) => {
-                LanguageStatus {
-                    language: self.language.clone(),
-                    bus_name: self.bus_name.clone(),
-                    available: true,
-                    display_name: Some(descriptor.display_name),
-                    detail: None,
-                }
+                LanguageStatus::available(
+                    self.language.clone(),
+                    self.bus_name.clone(),
+                    descriptor.display_name,
+                )
             }
             Ok(descriptor) => {
                 let (major, minor) = descriptor.contract_version;
-                LanguageStatus {
-                    language: self.language.clone(),
-                    bus_name: self.bus_name.clone(),
-                    available: false,
-                    display_name: Some(descriptor.display_name),
-                    detail: Some(format!(
+                LanguageStatus::unavailable(
+                    self.language.clone(),
+                    self.bus_name.clone(),
+                    format!(
                         "the provider speaks contract {major}.{minor}, which this build cannot bind to"
-                    )),
-                }
+                    ),
+                )
+                .with_display_name(descriptor.display_name)
             }
-            Err(error) => LanguageStatus {
-                language: self.language.clone(),
-                bus_name: self.bus_name.clone(),
-                available: false,
-                display_name: None,
-                detail: Some(error.to_string()),
-            },
+            Err(error) => LanguageStatus::unavailable(
+                self.language.clone(),
+                self.bus_name.clone(),
+                error.to_string(),
+            ),
         }
     }
 }
