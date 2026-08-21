@@ -126,7 +126,8 @@ fn an_absent_toolchain_is_an_ordinary_answer() {
 #[test]
 fn a_layout_request_names_the_directory_it_asks_about() {
     assert_eq!(
-        super::LayoutRequest::new("/cache/node-v22.11.0").install_dir,
+        super::LayoutRequest::new("/cache/node-v22.11.0", crate::RuntimeSettings::new("v22"))
+            .install_dir,
         "/cache/node-v22.11.0"
     );
 }

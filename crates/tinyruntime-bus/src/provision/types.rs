@@ -204,19 +204,27 @@ impl ProviderDescriptor {
 }
 
 /// Ask a provider where the executables are inside an extracted install.
+///
+/// The settings ride along because the router reuses installs by scanning its
+/// cache, and only the provider can say whether the toolchain in a given
+/// directory satisfies what the caller asked for. Without them the router would
+/// happily reuse a Python 3.11 install for a request that needs 3.12.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct LayoutRequest {
-    /// Absolute path to the directory the router extracted a toolchain into.
+    /// Absolute path to a directory that may hold an installed toolchain.
     pub install_dir: String,
+    /// What the caller asked for, so an unsuitable install can be declined.
+    pub settings: crate::RuntimeSettings,
 }
 
 impl LayoutRequest {
-    /// Builds a request about `install_dir`.
+    /// Builds a request about `install_dir` under `settings`.
     #[must_use]
-    pub fn new(install_dir: impl Into<String>) -> Self {
+    pub fn new(install_dir: impl Into<String>, settings: crate::RuntimeSettings) -> Self {
         Self {
             install_dir: install_dir.into(),
+            settings,
         }
     }
 }

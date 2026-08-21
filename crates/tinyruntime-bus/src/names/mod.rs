@@ -73,8 +73,8 @@ pub mod provider_methods {
 
     /// Reports where the executables are inside an extracted install.
     ///
-    /// Takes an install directory and returns a [`crate::LayoutResponse`] that
-    /// is empty when the directory holds no usable toolchain.
+    /// Takes a [`crate::LayoutRequest`] and returns a [`crate::LayoutResponse`]
+    /// that is empty when the directory holds no toolchain the settings accept.
     pub const LAYOUT: &str = "Layout";
 
     /// Supplies the worker harness the router launches for this language.
