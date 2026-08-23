@@ -1,0 +1,120 @@
+//! Unit tests for the worker environment.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+use std::path::Path;
+
+use tinyruntime_bus::WorkerHarness;
+
+use super::{build, materialise};
+
+#[test]
+fn the_toolchain_directory_comes_first_on_path() {
+    let env = build(Path::new("/managed/bin"), &[]);
+    let path = env
+        .iter()
+        .find(|(name, _)| name == "PATH")
+        .map(|(_, value)| value.clone())
+        .expect("a worker always gets a PATH");
+    assert!(path.starts_with("/managed/bin"), "got `{path}`");
+}
+
+#[test]
+fn a_variable_this_process_holds_does_not_reach_a_worker() {
+    // The whole reason the environment is an allow-list: this module is loaded
+    // into a host that holds credentials, and a worker runs code that must not
+    // be able to read them. Cargo sets `CARGO_MANIFEST_DIR` in this process, so
+    // it is a real unlisted variable rather than one the test planted.
+    assert!(
+        std::env::var("CARGO_MANIFEST_DIR").is_ok(),
+        "the test relies on cargo setting this"
+    );
+
+    let env = build(Path::new("/managed/bin"), &[]);
+    assert!(
+        !env.iter().any(|(name, _)| name == "CARGO_MANIFEST_DIR"),
+        "an unlisted variable leaked into the worker environment"
+    );
+    assert!(
+        env.iter().any(|(name, _)| name == "PATH"),
+        "a worker still needs the variables on the allow-list"
+    );
+}
+
+#[test]
+fn a_providers_extra_variables_are_added() {
+    let env = build(
+        Path::new("/managed/bin"),
+        &[("PYTHONUNBUFFERED".to_string(), "1".to_string())],
+    );
+    assert!(
+        env.iter()
+            .any(|(name, value)| name == "PYTHONUNBUFFERED" && value == "1")
+    );
+}
+
+#[tokio::test]
+async fn the_harness_is_written_where_the_worker_can_be_launched_from() {
+    let scratch = tempfile::tempdir().unwrap();
+    let harness = WorkerHarness::new("pool_worker.js", "// harness body", "node");
+
+    let path = materialise(scratch.path(), &harness)
+        .await
+        .expect("the harness is written");
+
+    assert_eq!(path.file_name().unwrap(), "pool_worker.js");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "// harness body");
+}
+
+#[tokio::test]
+async fn rewriting_replaces_a_stale_harness() {
+    // A provider that ships a new harness after an upgrade must not be shadowed
+    // by the previous one still on disk.
+    let scratch = tempfile::tempdir().unwrap();
+    materialise(
+        scratch.path(),
+        &WorkerHarness::new("pool_worker.js", "old", "node"),
+    )
+    .await
+    .unwrap();
+    let path = materialise(
+        scratch.path(),
+        &WorkerHarness::new("pool_worker.js", "new", "node"),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "new");
+}
+
+#[tokio::test]
+async fn a_harness_that_cannot_be_written_reports_a_storage_failure() {
+    // The directory is a file. A worker with no harness to run is a failure
+    // worth naming rather than a spawn that mysteriously exits.
+    let scratch = tempfile::tempdir().unwrap();
+    let blocker = scratch.path().join("not-a-directory");
+    std::fs::write(&blocker, b"x").unwrap();
+
+    let error = materialise(
+        &blocker.join("inner"),
+        &WorkerHarness::new("pool_worker.js", "// body", "node"),
+    )
+    .await
+    .expect_err("a file cannot contain the harness");
+    assert!(
+        matches!(error, crate::error::Error::Storage(_)),
+        "got {error:?}"
+    );
+}
+
+#[test]
+fn a_worker_with_no_inherited_path_still_gets_the_toolchain_directory() {
+    // `PATH` is built rather than inherited, so the toolchain is reachable even
+    // where this process has none.
+    let env = build(Path::new("/managed/bin"), &[]);
+    let path = env
+        .iter()
+        .find(|(name, _)| name == "PATH")
+        .map(|(_, value)| value.clone())
+        .expect("a worker always gets a PATH");
+    assert!(path.contains("/managed/bin"));
+}

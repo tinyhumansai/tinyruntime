@@ -1,0 +1,175 @@
+//! The warm-worker pool's tuning knobs and its counters.
+
+use serde::{Deserialize, Serialize};
+
+use crate::Language;
+
+/// How a host wants one language's worker pool sized and recycled.
+///
+/// The pool exists because a per-execution interpreter child costs tens of
+/// megabytes resident, and a host running many concurrent jobs pays that per
+/// job. A small bounded set of warm workers turns *K concurrent jobs into K
+/// interpreters* into *K concurrent jobs into a handful*, trading queueing
+/// latency for a flat memory floor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct PoolSettings {
+    /// Whether execution may use warm workers at all. With the pool off, every
+    /// job gets its own short-lived interpreter child.
+    pub enabled: bool,
+    /// Concurrent workers. Jobs beyond this queue rather than spawning.
+    pub max_workers: usize,
+    /// Retire a worker after this long idle. `0` keeps warm workers forever.
+    pub idle_ttl_secs: u64,
+    /// Retire a worker after this many jobs, bounding cross-job state leakage.
+    /// `0` disables recycling.
+    pub recycle_after_jobs: u64,
+    /// Queued jobs allowed beyond the worker slots before the pool sheds load.
+    pub max_queue_depth: usize,
+}
+
+impl PoolSettings {
+    /// The clamped worker count. Never zero: a pool that can hold no workers
+    /// would deadlock every submission rather than merely disabling itself.
+    #[must_use]
+    pub fn effective_max_workers(&self) -> usize {
+        self.max_workers.max(1)
+    }
+
+    /// The clamped queue depth, allowing a queue of zero (submissions beyond the
+    /// worker slots are shed immediately).
+    #[must_use]
+    pub fn effective_max_queue_depth(&self) -> usize {
+        self.max_queue_depth
+    }
+
+    /// The idle time-to-live, or `None` when warm workers are never reaped.
+    #[must_use]
+    pub fn idle_ttl_secs(&self) -> Option<u64> {
+        if self.idle_ttl_secs == 0 {
+            None
+        } else {
+            Some(self.idle_ttl_secs)
+        }
+    }
+}
+
+impl PoolSettings {
+    /// Sets the concurrent worker count.
+    #[must_use]
+    pub fn with_max_workers(mut self, max_workers: usize) -> Self {
+        self.max_workers = max_workers;
+        self
+    }
+
+    /// Sets how long a parked worker survives, `0` for forever.
+    #[must_use]
+    pub fn with_idle_ttl_secs(mut self, idle_ttl_secs: u64) -> Self {
+        self.idle_ttl_secs = idle_ttl_secs;
+        self
+    }
+
+    /// Sets the job budget after which a worker is retired, `0` to disable.
+    #[must_use]
+    pub fn with_recycle_after_jobs(mut self, recycle_after_jobs: u64) -> Self {
+        self.recycle_after_jobs = recycle_after_jobs;
+        self
+    }
+
+    /// Sets how many jobs may queue beyond the worker slots.
+    #[must_use]
+    pub fn with_max_queue_depth(mut self, max_queue_depth: usize) -> Self {
+        self.max_queue_depth = max_queue_depth;
+        self
+    }
+
+    /// Turns the warm-worker pool on or off.
+    #[must_use]
+    pub fn with_enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+}
+
+impl Default for PoolSettings {
+    /// A small pool sized for a host running many agents rather than one big job.
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_workers: 2,
+            idle_ttl_secs: 300,
+            recycle_after_jobs: 100,
+            max_queue_depth: 256,
+        }
+    }
+}
+
+/// One live pool's counters.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct PoolStats {
+    /// The language this pool serves.
+    pub language: Language,
+    /// Jobs completed since the pool was built.
+    pub jobs_total: u64,
+    /// Interpreter children spawned. Far below `jobs_total` is the pool working.
+    pub worker_spawns: u64,
+    /// Submissions refused because the pool was at capacity.
+    pub rejected_saturated: u64,
+    /// Warm workers currently parked and reusable.
+    pub idle_workers: usize,
+    /// The pool's configured concurrency.
+    pub max_workers: usize,
+}
+
+impl PoolStats {
+    /// Zeroed counters for a pool that has done nothing yet.
+    #[must_use]
+    pub fn new(language: Language, max_workers: usize) -> Self {
+        Self {
+            language,
+            jobs_total: 0,
+            worker_spawns: 0,
+            rejected_saturated: 0,
+            idle_workers: 0,
+            max_workers,
+        }
+    }
+
+    /// Records what the pool has served.
+    #[must_use]
+    pub fn with_counts(
+        mut self,
+        jobs_total: u64,
+        worker_spawns: u64,
+        rejected_saturated: u64,
+    ) -> Self {
+        self.jobs_total = jobs_total;
+        self.worker_spawns = worker_spawns;
+        self.rejected_saturated = rejected_saturated;
+        self
+    }
+
+    /// Records how many warm workers are parked.
+    #[must_use]
+    pub fn with_idle_workers(mut self, idle_workers: usize) -> Self {
+        self.idle_workers = idle_workers;
+        self
+    }
+}
+
+/// The reply listing every live pool.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct PoolStatsResponse {
+    /// One entry per language with a live pool.
+    pub pools: Vec<PoolStats>,
+}
+
+impl PoolStatsResponse {
+    /// A reply carrying `pools`.
+    #[must_use]
+    pub fn new(pools: Vec<PoolStats>) -> Self {
+        Self { pools }
+    }
+}

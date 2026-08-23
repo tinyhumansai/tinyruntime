@@ -4,87 +4,95 @@ This file is the single source of truth for how humans and coding agents work
 in this repository. `CLAUDE.md` is a symlink to this file, so every agent reads
 the same instructions.
 
-When you generate a new project from this template, keep this file and adapt
-the project-specific parts (crate name, module map, feature flags, commands).
-Delete guidance that no longer applies rather than leaving it to rot.
-
-## Template Checklist
-
-Do this once, in a single commit, before writing feature code:
-
-- [ ] Rename `crates/template` and `crates/template-bus` to the project's crate
-      names, and update `name` in each manifest plus the `template-bus` entry in
-      the root `[workspace.dependencies]`.
-- [ ] Set `description`, `keywords`, and `categories` in each manifest, and
-      `repository` in the root `[workspace.package]`.
-- [ ] Rename the crate references in `README.md`, both `src/lib.rs` files,
-      `crates/template/examples/`, and `crates/template/tests/` (search for
-      `template` and `template_bus`).
-- [ ] Replace the placeholder `greeting` module in both crates with the first
-      real feature area — payload types in the contract crate, behavior in the
-      module crate — keeping the `mod.rs` / `types.rs` / `test.rs` layout.
-- [ ] Confirm `license` and `LICENSE` match the project's intended license.
-- [ ] Update the security contact in `SECURITY.md`.
-- [ ] Rename the TinyBus interface, object path, and member constants in
-      `crates/template-bus/src/names/`, and the matching `provides` / `methods`
-      declarations in `crates/template/src/tinybus_module/`, while keeping
-      `vendor/tinybus` pinned.
-- [ ] Reset `CONTRACT_VERSION` in `crates/template-bus/src/version/` for the new
-      contract.
-- [ ] Replace `ROADMAP.md` with the real plan, or delete it.
-- [ ] Rewrite the "Project Structure" section below to describe this workspace.
+`tinyruntime` is the runtime **router**: a TinyBus module that resolves a
+language runtime, downloads and installs one when the host has none, reuses one
+when it does, and runs code on a bounded pool of warm interpreter processes. The
+language-specific knowledge lives in provider modules, not here — see
+"The router and its providers" below before adding anything that names a
+language.
 
 ## Project Structure
 
 This is a Rust 2024 cargo workspace rooted at a virtual `Cargo.toml`. Every
 crate lives under `crates/`, one directory per package, each directory named for
 the package it holds. There is no root package: the crate that ships as the
-loadable module is `crates/template`, the same as any other member.
+loadable module is `crates/tinyruntime`, the same as any other member.
 
 ```text
 Cargo.toml              # virtual workspace: members, [workspace.package],
                         # [workspace.dependencies], [workspace.lints]
 crates/
-├── template-bus/       # the wire contract: what crosses the bus, nothing else
+├── tinyruntime-bus/    # the wire contract: what crosses the bus, nothing else
 │   ├── README.md       # why the contract is its own crate
 │   └── src/
 │       ├── lib.rs      # crate docs + the entire public re-export surface
-│       ├── names/      # interface, object path, one constant per member
-│       ├── version/    # contract version and the host bind rule
-│       └── <family>/   # one directory per payload family
-└── template/           # the module: behavior, adapter, and the cdylib
+│       ├── names/      # both interfaces, both paths, one constant per member
+│       ├── version/    # contract version and the bind rule
+│       ├── language/   # the routing key
+│       ├── settings/   # what a host asks for, carried on every request
+│       ├── resolve/    # asking for a runtime, being told which one you got
+│       ├── provision/  # how a provider describes a toolchain it does not install
+│       ├── harness/    # the worker script a provider ships
+│       ├── exec/       # running code, and what came back
+│       └── pool/       # warm-worker tuning and counters
+└── tinyruntime/        # the router: behaviour, adapter, and the cdylib
     ├── src/
     │   ├── lib.rs      # crate docs + public surface, re-exporting the contract
-    │   ├── error/mod.rs      # crate-wide `Error` and `Result<T>`
-    │   ├── tinybus_module/   # TinyBus interface, ABI exports, integration tests
-    │   └── <feature>/        # one directory per feature area
-    │       ├── mod.rs        # module docs, wiring, smallest useful public API
-    │       ├── types.rs      # substantial type definitions
-    │       └── test.rs       # module-local unit tests
+    │   ├── error/      # crate-wide `Error` and `Result<T>`
+    │   ├── config/     # the ModuleConfig a host supplies at load time
+    │   ├── provider/   # the five questions, the routing table, the bus provider
+    │   ├── resolve/    # reuse before download, install under a lock
+    │   ├── download/   # fetch and verify
+    │   ├── archive/    # unpack
+    │   ├── store/      # cache roots, install locks, atomic promotion
+    │   ├── pool/       # warm workers, framing, backpressure
+    │   ├── exec/       # the Engine, which is all of the above
+    │   └── tinybus_module/   # TinyBus interface, ABI exports, integration tests
     ├── tests/          # integration tests against the public API only
     └── examples/       # runnable, compiled-in-CI usage examples
 vendor/tinybus/         # pinned TinyBus host types and module SDK
 docs/
-├── specs/              # behavior and architecture specifications
+├── specs/              # behaviour and architecture specifications
 ├── plans/              # test-first implementation plans
 └── adr/                # immutable architecture decision records
 ```
 
 ### The two-crate split
 
-`crates/template-bus` holds every type that crosses the bus and the names of the
-members that carry them. It has no transport, no runtime, and no behavior, and
-CI asserts it stays that way. A host that only makes calls depends on it alone.
+`crates/tinyruntime-bus` holds every type that crosses the bus and the names of
+the members that carry them. It has no transport, no runtime, and no behaviour,
+and CI asserts it stays that way. A host that only makes calls depends on it
+alone, and so does every provider module.
 
-`crates/template` depends on it and re-exports all of it, so
-`template::GreetRequest` and `template_bus::GreetRequest` are the *same* type
-rather than structural twins. That direction is load-bearing: a parallel set of
-payload types for hosts would mean a conversion at every call site that nothing
-checks.
+`crates/tinyruntime` depends on it and re-exports all of it, so
+`tinyruntime::ExecRequest` and `tinyruntime_bus::ExecRequest` are the *same*
+type rather than structural twins. That direction is load-bearing: a parallel
+set of payload types for hosts would mean a conversion at every call site that
+nothing checks.
 
 The rule for deciding where something goes: a payload type describes what a
 frame carries and belongs in the contract; anything that answers a frame, holds
-a connection, or touches an engine belongs in the module crate.
+a connection, or touches the filesystem belongs in the module crate.
+
+### The router and its providers
+
+This repository is one half of a system. It is the **router**: it owns
+everything that is identical for every language — downloading an archive,
+verifying its digest, unpacking it, promoting it into a cache atomically,
+reusing it on the next start, and keeping a bounded set of warm interpreter
+processes in front of it.
+
+The language-specific half lives in separate repositories — `tinyruntime-nodejs`
+and `tinyruntime-python` — which serve `ai.tinyhumans.runtime.Provider` and
+answer five questions each: what they are, whether the host already has a usable
+toolchain, which archive to install, where the binaries are once unpacked, and
+what a warm worker for that language looks like. They download nothing and
+install nothing.
+
+**There is no language knowledge in this repository, and there must not be.** A
+`grep` for `node` or `python` in `crates/tinyruntime/src` that finds anything
+other than a comment is a bug: it means something that belongs in a provider has
+leaked into the router, and the next language will have to work around it.
 
 Add a crate by creating `crates/<name>/` — `members = ["crates/*"]` picks it up
 by existing. Inherit `version`, `edition`, `rust-version`, `license`, and
@@ -114,7 +122,7 @@ broad ones.
 
 Keep public exports centralized in each crate's `src/lib.rs` so downstream users
 have one predictable surface. Put shared error variants in
-`crates/template/src/error/mod.rs` and return the crate-wide `Result<T>` from
+`crates/tinyruntime/src/error/mod.rs` and return the crate-wide `Result<T>` from
 fallible public APIs.
 
 ## Build And Test
@@ -133,8 +141,8 @@ Supporting commands:
 
 - `cargo fmt --all` — format before committing.
 - `cargo test <filter>` — run a focused subset while iterating.
-- `cargo test -p template-bus` — run one crate's suite.
-- `cargo run -p template --example basic` — run the bundled example.
+- `cargo test -p tinyruntime-bus` — run one crate's suite.
+- `cargo run -p tinyruntime --example basic` — run the bundled example.
 - `cargo doc --no-deps --all-features` — build the rustdoc CI also builds with
   `RUSTDOCFLAGS="-D warnings"`.
 - `cargo test --doc` — run doctests alone when editing documentation examples.
@@ -185,7 +193,7 @@ add one:
 - gate anything optional behind a Cargo feature, documented in `Cargo.toml`;
 - declare it once in the root `[workspace.dependencies]` when more than one
   crate needs it, and take it with `{ workspace = true }`;
-- never add one to `crates/template-bus` that pulls in a transport, an async
+- never add one to `crates/tinyruntime-bus` that pulls in a transport, an async
   runtime, an HTTP client, or a native library — CI fails the build if you do;
 - leave a comment above the entry explaining *why* the crate is needed and what
   uses it — see the existing entries for the expected tone;
@@ -213,6 +221,10 @@ new module capability requires more.
 
 - Module-local unit tests live in `crates/<crate>/src/<feature>/test.rs` and may
   touch private items.
+- The router is testable without a bus. `crates/tinyruntime/src/provider/stub.rs`
+  answers the five provider questions from memory, so resolution, reuse, install,
+  and execution are exercised without a second module, a release channel, or a
+  network. Reach for it before reaching for a real provider.
 - Integration tests live in `crates/<crate>/tests/` and exercise only the public
   API — they are the regression suite for the crate's contract.
 - Payload types pin their serde representation in a unit test. That
@@ -295,7 +307,7 @@ Releases run from `.github/workflows/release.yml` via a manual
 an interrupted release after its version commit and tag exist. The workflow
 re-runs the full validation suite, computes the next version, updates
 the root `[workspace.package]` version and `Cargo.lock`, commits and tags
-`vX.Y.Z`, builds `crates/template` as a TinyBus module for every supported
+`vX.Y.Z`, builds `crates/tinyruntime` as a TinyBus module for every supported
 platform, pushes, and creates an immutable GitHub release with installable
 native packages.
 
