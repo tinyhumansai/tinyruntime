@@ -75,7 +75,7 @@ reqwest = { version = "0.12", default-features = false, features = [
 # Verifying that a downloaded archive is the archive the channel published. This
 # is load-bearing rather than defensive: the bytes become an interpreter this
 # host then runs code with.
-sha2 = "0.10"
+sha2 = "0.11"
 # Rendering a digest for comparison against the hex a channel publishes.
 hex = "0.4"
 # Unpacking toolchain archives. `tar` reads the entries; `flate2` and `xz2`
