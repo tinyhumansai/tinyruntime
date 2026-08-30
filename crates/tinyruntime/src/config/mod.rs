@@ -20,11 +20,10 @@ use tinyruntime_bus::{Language, names};
 /// the same thing: the first-party providers and the platform cache.
 ///
 /// `#[serde(default)]` on the private `Wire` mirror covers the empty object,
-/// because it fills in
-/// absent *fields*. It does not cover `null`, which is a whole document of the
-/// wrong type — hence the hand-written [`Deserialize`] below, via
-/// `Option<Wire>`. A module that refused `null` would fail to load for exactly
-/// the host that asked nothing of it.
+/// because it fills in absent *fields*. It does not cover `null`, which is a
+/// whole document of the wrong type — hence the hand-written `Deserialize`
+/// below, via `Option<Wire>`. A module that refused `null` would fail to load
+/// for exactly the host that asked nothing of it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ModuleConfig {
     /// The languages to route, and where.
