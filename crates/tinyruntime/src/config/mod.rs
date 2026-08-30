@@ -14,14 +14,64 @@ use serde::{Deserialize, Serialize};
 use tinyruntime_bus::{Language, names};
 
 /// What the host told this module at load time.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
+///
+/// Arrives as JSON in the loader's configuration slot. A host that configures
+/// nothing supplies either the empty object or `null`, so both must decode to
+/// the same thing: the first-party providers and the platform cache.
+///
+/// `#[serde(default)]` on [`Wire`] covers the empty object, because it fills in
+/// absent *fields*. It does not cover `null`, which is a whole document of the
+/// wrong type — hence the hand-written [`Deserialize`] below, via
+/// `Option<Wire>`. A module that refused `null` would fail to load for exactly
+/// the host that asked nothing of it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ModuleConfig {
     /// The languages to route, and where.
     pub providers: Vec<ProviderRoute>,
     /// Where worker harnesses are written, or empty for a directory under the
     /// platform cache.
     pub harness_dir: String,
+}
+
+/// The fields as they appear on the wire.
+///
+/// Separate from [`ModuleConfig`] so the hand-written deserializer below can
+/// derive the field handling rather than restate it. Its own `Default` mirrors
+/// [`ModuleConfig::default`] rather than deriving one, so a partial object
+/// (e.g. `{ "harness_dir": "..." }`) still fills the missing `providers` with
+/// the first-party routes instead of an empty list.
+#[derive(Deserialize)]
+#[serde(default)]
+struct Wire {
+    providers: Vec<ProviderRoute>,
+    harness_dir: String,
+}
+
+impl Default for Wire {
+    fn default() -> Self {
+        let default = ModuleConfig::default();
+        Self {
+            providers: default.providers,
+            harness_dir: default.harness_dir,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ModuleConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // `Option` is what turns `null` into "nothing configured" rather than
+        // a type error. Everything else decodes through the derived impl.
+        match Option::<Wire>::deserialize(deserializer)? {
+            Some(wire) => Ok(Self {
+                providers: wire.providers,
+                harness_dir: wire.harness_dir,
+            }),
+            None => Ok(Self::default()),
+        }
+    }
 }
 
 /// One language and the bus name its provider claims.
