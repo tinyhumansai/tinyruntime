@@ -22,6 +22,29 @@ fn an_empty_configuration_object_still_yields_the_defaults() {
 }
 
 #[test]
+fn a_null_configuration_still_yields_the_defaults() {
+    // A `TinyBus` host that configures nothing sends `null`, not `{}` — the
+    // loader's release path in particular always serializes a JSON value, and
+    // an unconfigured `serde_json::Value` is `Null`. Rejecting it would refuse
+    // to load for exactly the host that asked nothing of this module.
+    let config: ModuleConfig = serde_json::from_value(serde_json::Value::Null).unwrap();
+    assert_eq!(config, ModuleConfig::default());
+}
+
+#[test]
+fn a_partial_configuration_still_defaults_the_missing_providers() {
+    // Setting only `harness_dir` must not silently drop the first-party
+    // routes — `Wire`'s default has to mirror `ModuleConfig`'s, not the
+    // derived (empty) one.
+    let config: ModuleConfig = serde_json::from_value(serde_json::json!({
+        "harness_dir": "/var/lib/tinyruntime"
+    }))
+    .unwrap();
+    assert_eq!(config.providers, ModuleConfig::default().providers);
+    assert_eq!(config.harness_dir, "/var/lib/tinyruntime");
+}
+
+#[test]
 fn a_host_can_route_a_language_somewhere_else() {
     let config: ModuleConfig = serde_json::from_value(serde_json::json!({
         "providers": [{ "language": "nodejs", "bus_name": "ai.example.MyNode" }]
