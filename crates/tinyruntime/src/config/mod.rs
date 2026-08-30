@@ -19,7 +19,8 @@ use tinyruntime_bus::{Language, names};
 /// nothing supplies either the empty object or `null`, so both must decode to
 /// the same thing: the first-party providers and the platform cache.
 ///
-/// `#[serde(default)]` on [`Wire`] covers the empty object, because it fills in
+/// `#[serde(default)]` on the private `Wire` mirror covers the empty object,
+/// because it fills in
 /// absent *fields*. It does not cover `null`, which is a whole document of the
 /// wrong type — hence the hand-written [`Deserialize`] below, via
 /// `Option<Wire>`. A module that refused `null` would fail to load for exactly
