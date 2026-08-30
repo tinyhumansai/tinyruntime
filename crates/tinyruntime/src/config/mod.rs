@@ -78,3 +78,14 @@ impl ModuleConfig {
 
 #[cfg(test)]
 mod test;
+
+#[cfg(test)]
+mod repro_test {
+    use super::ModuleConfig;
+
+    #[test]
+    fn null_config_decodes() {
+        let result: Result<ModuleConfig, _> = serde_json::from_slice(b"null");
+        assert!(result.is_ok(), "{result:?}");
+    }
+}
