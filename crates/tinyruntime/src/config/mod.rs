@@ -36,12 +36,25 @@ pub struct ModuleConfig {
 /// The fields as they appear on the wire.
 ///
 /// Separate from [`ModuleConfig`] so the hand-written deserializer below can
-/// derive the field handling rather than restate it.
-#[derive(Deserialize, Default)]
+/// derive the field handling rather than restate it. Its own `Default` mirrors
+/// [`ModuleConfig::default`] rather than deriving one, so a partial object
+/// (e.g. `{ "harness_dir": "..." }`) still fills the missing `providers` with
+/// the first-party routes instead of an empty list.
+#[derive(Deserialize)]
 #[serde(default)]
 struct Wire {
     providers: Vec<ProviderRoute>,
     harness_dir: String,
+}
+
+impl Default for Wire {
+    fn default() -> Self {
+        let default = ModuleConfig::default();
+        Self {
+            providers: default.providers,
+            harness_dir: default.harness_dir,
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for ModuleConfig {
