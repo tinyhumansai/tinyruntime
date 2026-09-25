@@ -116,6 +116,14 @@ vendor/tinybus/         # pinned TinyBus host types and module SDK
 A host that only makes calls takes `tinyruntime-bus` alone and compiles neither
 the module nor `tinybus`.
 
+## Linking into a host
+
+The default build exports the TinyBus C ABI for dynamic loading. To link the
+module into a Rust host, enable its `static-link` feature and pass
+`tinyruntime::linked_module()?` to the TinyBus linked-module host API. This uses
+the same declaration and manifest as the dynamic build, with Rust-addressable
+symbols that can coexist with other linked modules.
+
 ## Building
 
 ```sh

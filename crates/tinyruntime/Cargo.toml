@@ -48,6 +48,8 @@ tempfile = { workspace = true }
 
 [features]
 default = []
+# Link this module into a host binary without exporting the shared C symbols.
+static-link = []
 
 [lints]
 workspace = true

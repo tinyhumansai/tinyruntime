@@ -86,6 +86,17 @@ mod testing;
 
 mod tinybus_module;
 
+/// Entry points for hosts that link this module into their executable.
+#[cfg(feature = "static-link")]
+pub mod linked {
+    pub use crate::tinybus_module::exports::{
+        TINYBUS_MODULE_ABI_V1, tinybus_module_init_v1, tinybus_module_manifest_v1,
+    };
+}
+
+#[cfg(feature = "static-link")]
+pub use tinybus_module::exports::linked_module;
+
 pub use config::{ModuleConfig, ProviderRoute};
 pub use error::{Error, Result};
 pub use exec::Engine;

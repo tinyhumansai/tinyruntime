@@ -74,3 +74,21 @@ async fn a_request_naming_no_language_is_refused_rather_than_defaulted() {
 async fn an_engine_reports_no_pools_before_anything_runs() {
     assert!(engine().pool_stats().await.is_empty());
 }
+
+#[cfg(feature = "static-link")]
+#[test]
+fn linked_entry_points_are_available_to_a_host() {
+    let linked = tinyruntime::linked_module().expect("linked module exports are valid");
+    assert_eq!(linked.manifest.provides.len(), 1);
+    fn assert_entry_types(
+        _: &tinybus::module::abi::TbAbiDescriptor,
+        _: tinybus::module::abi::TbModuleInit,
+    ) {
+    }
+    assert_entry_types(
+        &tinyruntime::linked::TINYBUS_MODULE_ABI_V1,
+        tinyruntime::linked::tinybus_module_init_v1,
+    );
+    let manifest = tinyruntime::linked::tinybus_module_manifest_v1();
+    assert!(manifest.len > 0);
+}
