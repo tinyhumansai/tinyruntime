@@ -8,6 +8,7 @@
 //! be built.
 
 use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -44,6 +45,10 @@ enum Cache {
     },
 }
 
+/// The host's launch preparation, boxed so the policy below is compiled once
+/// rather than once per caller.
+type Launching<'a> = Pin<Box<dyn Future<Output = Result<ServerLaunch>> + Send + 'a>>;
+
 /// One shared worker and the policy for keeping it.
 #[derive(Debug)]
 pub struct ServerSlot {
@@ -73,22 +78,32 @@ impl ServerSlot {
     /// * A failed startup is remembered for [`START_FAILURE_BACKOFF`], during
     ///   which callers get the previous failure back instead of a new attempt.
     ///
-    /// `prepare` runs only when a new worker must be built.
+    /// `prepare` is awaited only when a new worker must be built; it is a lazy
+    /// future, so anything it would do (provisioning a virtual environment) is
+    /// skipped when a worker is already running.
     ///
     /// # Errors
     ///
     /// Returns [`Error::Unavailable`] when a worker could not be started,
     /// [`Error::BackingOff`] while a previous failure is being honoured.
-    pub async fn ensure<P, Fut>(
+    pub async fn ensure<F>(
         &self,
         requested: &[String],
         idle: Option<IdleRule<'_>>,
-        prepare: P,
+        prepare: F,
     ) -> Result<Arc<PythonServer>>
     where
-        P: FnOnce() -> Fut,
-        Fut: Future<Output = Result<ServerLaunch>>,
+        F: Future<Output = Result<ServerLaunch>> + Send,
     {
+        self.ensure_boxed(requested, idle, Box::pin(prepare)).await
+    }
+
+    async fn ensure_boxed(
+        &self,
+        requested: &[String],
+        idle: Option<IdleRule<'_>>,
+        prepare: Launching<'_>,
+    ) -> Result<Arc<PythonServer>> {
         let mut guard = self.cache.lock().await;
         let cached = match &*guard {
             Cache::Ready(existing) => Some(existing.clone()),
@@ -177,12 +192,8 @@ fn failed(message: String) -> Cache {
     }
 }
 
-async fn build<P, Fut>(prepare: P) -> Result<Arc<PythonServer>>
-where
-    P: FnOnce() -> Fut,
-    Fut: Future<Output = Result<ServerLaunch>>,
-{
-    let server = Arc::new(PythonServer::new(prepare().await?));
+async fn build(prepare: Launching<'_>) -> Result<Arc<PythonServer>> {
+    let server = Arc::new(PythonServer::new(prepare.await?));
     server.start().await?;
     Ok(server)
 }

@@ -24,21 +24,13 @@ use crate::status::{BackendStatus, ServerStatus};
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
+#[derive(Debug)]
 struct Inner {
     child: Child,
     stdin: ChildStdin,
     stdout: Lines<BufReader<ChildStdout>>,
     next_id: u64,
     ready_backends: Vec<String>,
-}
-
-impl std::fmt::Debug for Inner {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Inner")
-            .field("next_id", &self.next_id)
-            .field("ready_backends", &self.ready_backends)
-            .finish_non_exhaustive()
-    }
 }
 
 /// A persistent Python worker serving named backends over stdio.
@@ -120,9 +112,7 @@ impl PythonServer {
         if guard.is_none() {
             *guard = Some(spawn_inner(&self.launch).await?);
         }
-        let Some(inner) = guard.as_mut() else {
-            return Err(Error::Closed);
-        };
+        let inner = guard.as_mut().ok_or(Error::Closed)?;
         let id = inner.next_id.to_string();
         inner.next_id += 1;
 

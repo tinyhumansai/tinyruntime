@@ -36,7 +36,7 @@ async fn one_worker_is_built_once_and_shared() {
         let builds = builds.clone();
         let spec = healthy(dir.path());
         let server = slot
-            .ensure(&requested, None, || async move {
+            .ensure(&requested, None, async move {
                 builds.fetch_add(1, Ordering::SeqCst);
                 Ok(spec)
             })
@@ -56,13 +56,13 @@ async fn a_changed_backend_set_rebuilds_the_worker() {
     let dir = tempfile::tempdir().unwrap();
     let slot = ServerSlot::new();
     let first = slot
-        .ensure(&names(&["alpha"]), None, || async {
+        .ensure(&names(&["alpha"]), None, async {
             Ok(healthy(dir.path()))
         })
         .await
         .unwrap();
     let second = slot
-        .ensure(&names(&["alpha", "beta"]), None, || async {
+        .ensure(&names(&["alpha", "beta"]), None, async {
             let mut spec = healthy(dir.path());
             spec.backends = names(&["alpha", "beta"]);
             Ok(spec)
@@ -79,7 +79,7 @@ async fn an_idle_heavy_backend_rebuilds_the_worker_but_a_busy_or_other_one_does_
     let slot = ServerSlot::new();
     let requested = names(&["alpha"]);
     let first = slot
-        .ensure(&requested, None, || async { Ok(healthy(dir.path())) })
+        .ensure(&requested, None, async { Ok(healthy(dir.path())) })
         .await
         .unwrap();
 
@@ -91,7 +91,7 @@ async fn an_idle_heavy_backend_rebuilds_the_worker_but_a_busy_or_other_one_does_
                 backend: "alpha",
                 timeout: Duration::from_secs(3600),
             }),
-            || async { panic!("must not rebuild") },
+            async { panic!("must not rebuild") },
         )
         .await
         .unwrap();
@@ -105,7 +105,7 @@ async fn an_idle_heavy_backend_rebuilds_the_worker_but_a_busy_or_other_one_does_
                 backend: "beta",
                 timeout: Duration::ZERO,
             }),
-            || async { panic!("must not rebuild") },
+            async { panic!("must not rebuild") },
         )
         .await
         .unwrap();
@@ -119,7 +119,7 @@ async fn an_idle_heavy_backend_rebuilds_the_worker_but_a_busy_or_other_one_does_
                 backend: "alpha",
                 timeout: Duration::ZERO,
             }),
-            || async { Ok(healthy(dir.path())) },
+            async { Ok(healthy(dir.path())) },
         )
         .await
         .unwrap();
@@ -132,7 +132,7 @@ async fn a_failed_start_is_remembered_and_not_retried() {
     let slot = ServerSlot::new();
     let requested = names(&["alpha"]);
     let error = slot
-        .ensure(&requested, None, || async {
+        .ensure(&requested, None, async {
             Err(Error::Prepare("venv is broken".to_string()))
         })
         .await
@@ -144,7 +144,7 @@ async fn a_failed_start_is_remembered_and_not_retried() {
 
     // Within the back-off, the previous failure comes back and nothing runs.
     let error = slot
-        .ensure(&requested, None, || async {
+        .ensure(&requested, None, async {
             panic!("must not retry inside the back-off")
         })
         .await
@@ -167,7 +167,7 @@ async fn a_worker_that_will_not_start_is_a_failure_too() {
     let dir = tempfile::tempdir().unwrap();
     let slot = ServerSlot::new();
     let error = slot
-        .ensure(&names(&["alpha"]), None, || async {
+        .ensure(&names(&["alpha"]), None, async {
             Ok(launch(dir.path(), "exit 0\n"))
         })
         .await
@@ -181,7 +181,7 @@ async fn a_cached_worker_that_dies_backs_off() {
     let slot = ServerSlot::new();
     let requested = names(&["alpha"]);
     let server = slot
-        .ensure(&requested, None, || async { Ok(healthy(dir.path())) })
+        .ensure(&requested, None, async { Ok(healthy(dir.path())) })
         .await
         .unwrap();
     // Reset the child, then make its script unstartable: the next `ensure`
@@ -189,12 +189,12 @@ async fn a_cached_worker_that_dies_backs_off() {
     server.reset().await;
     std::fs::write(dir.path().join("worker.sh"), "exit 0\n").unwrap();
     let error = slot
-        .ensure(&requested, None, || async { panic!("must not rebuild") })
+        .ensure(&requested, None, async { panic!("must not rebuild") })
         .await
         .unwrap_err();
     assert!(matches!(error, Error::Unavailable(_)), "{error}");
     let error = slot
-        .ensure(&requested, None, || async { panic!("must not rebuild") })
+        .ensure(&requested, None, async { panic!("must not rebuild") })
         .await
         .unwrap_err();
     assert!(matches!(error, Error::BackingOff(_)), "{error}");
