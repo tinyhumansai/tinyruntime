@@ -35,6 +35,8 @@ crates/
 │       ├── harness/    # the worker script a provider ships
 │       ├── exec/       # running code, and what came back
 │       └── pool/       # warm-worker tuning and counters
+├── tinyruntime-pyserver/  # pure library: one persistent Python worker over
+│                          # JSON-lines stdio (not a bus member; a host links it)
 └── tinyruntime/        # the router: behaviour, adapter, and the cdylib
     ├── src/
     │   ├── lib.rs      # crate docs + public surface, re-exporting the contract
