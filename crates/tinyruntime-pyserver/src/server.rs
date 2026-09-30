@@ -168,12 +168,10 @@ impl PythonServer {
                 continue;
             }
             if !response.ok {
-                let message = response
-                    .error
-                    .map_or_else(
-                        || "unknown python server error".to_string(),
-                        |error| format!("{}: {}", error.code, error.message),
-                    );
+                let message = response.error.map_or_else(
+                    || "unknown python server error".to_string(),
+                    |error| format!("{}: {}", error.code, error.message),
+                );
                 return Err(Error::Remote {
                     method: method.to_string(),
                     message,
@@ -301,8 +299,7 @@ async fn spawn_inner(launch: &ServerLaunch) -> Result<Inner> {
     }
     let mut lines = BufReader::new(stdout).lines();
 
-    let ready_line = match tokio::time::timeout(launch.handshake_timeout, lines.next_line()).await
-    {
+    let ready_line = match tokio::time::timeout(launch.handshake_timeout, lines.next_line()).await {
         Ok(Ok(Some(line))) => line,
         Ok(Ok(None)) => return Err(Error::ExitedBeforeReady),
         Ok(Err(error)) => return Err(Error::HandshakeRead(error)),

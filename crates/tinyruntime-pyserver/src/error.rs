@@ -13,7 +13,9 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// The interpreter could not be spawned.
-    #[error("spawning runtime python server: failed to spawn python process `{bin}` for script {script}: {source}")]
+    #[error(
+        "spawning runtime python server: failed to spawn python process `{bin}` for script {script}: {source}"
+    )]
     Spawn {
         /// The interpreter that was launched.
         bin: String,
