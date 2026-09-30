@@ -56,9 +56,7 @@ async fn a_changed_backend_set_rebuilds_the_worker() {
     let dir = tempfile::tempdir().unwrap();
     let slot = ServerSlot::new();
     let first = slot
-        .ensure(&names(&["alpha"]), None, async {
-            Ok(healthy(dir.path()))
-        })
+        .ensure(&names(&["alpha"]), None, async { Ok(healthy(dir.path())) })
         .await
         .unwrap();
     let second = slot
