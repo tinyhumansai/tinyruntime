@@ -11,4 +11,5 @@ mod types;
 pub use types::{WORKER_PROTOCOL_VERSION, WorkerHarness};
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

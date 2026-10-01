@@ -50,4 +50,5 @@ fn binds(local: (u32, u32), other: (u32, u32)) -> bool {
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

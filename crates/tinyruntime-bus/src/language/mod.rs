@@ -10,4 +10,5 @@ mod types;
 pub use types::{Language, NODEJS, PYTHON};
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

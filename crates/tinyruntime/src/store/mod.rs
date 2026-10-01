@@ -196,4 +196,5 @@ pub async fn discard(path: &Path) {
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

@@ -165,4 +165,5 @@ fn sanitise(error: &reqwest::Error) -> String {
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

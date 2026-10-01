@@ -83,5 +83,5 @@ pub struct JobResponse {
 }
 
 #[cfg(test)]
-#[path = "protocol_test.rs"]
+#[path = "protocol_tests.rs"]
 mod test;

@@ -200,4 +200,5 @@ fn managed(language: &Language, install_dir: &Path, layout: RuntimeLayout) -> Re
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

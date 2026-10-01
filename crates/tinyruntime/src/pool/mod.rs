@@ -122,5 +122,5 @@ impl Pools {
 }
 
 #[cfg(test)]
-#[path = "pool_test.rs"]
+#[path = "pool_tests.rs"]
 mod test;

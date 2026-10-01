@@ -42,5 +42,5 @@ pub async fn write_script(root: &Path) -> Result<PathBuf> {
 }
 
 #[cfg(test)]
-#[path = "script_test.rs"]
+#[path = "script_tests.rs"]
 mod tests;
