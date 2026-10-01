@@ -1,0 +1,28 @@
+[package]
+name = "tinyruntime-pyserver"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A persistent Python worker host: one warm interpreter serving named backends over a private JSON-lines stdio protocol."
+publish = false
+
+# A pure library, linked in-process by a host that wants a long-lived Python
+# worker (spaCy, a torch model) without the bus round-trip, the loopback socket
+# or the per-job pool of the `tinyruntime` module. Deliberately absent: the
+# TinyBus module, the interpreter download/install machinery, and any notion of
+# a host's configuration. The host decides *which* interpreter, script and
+# environment to launch and hands them over as a `ServerLaunch`.
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

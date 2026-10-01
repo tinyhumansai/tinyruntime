@@ -72,7 +72,7 @@ async fn a_request_naming_no_language_is_refused_rather_than_defaulted() {
 
 #[tokio::test]
 async fn an_engine_reports_no_pools_before_anything_runs() {
-    assert!(engine().pool_stats().await.is_empty());
+    assert_eq!(engine().pool_stats().await.len(), 0);
 }
 
 #[cfg(feature = "static-link")]
