@@ -17,7 +17,7 @@ fn a_bare_ready_line_defaults_to_not_ready() {
     let ready: ReadyLine = serde_json::from_str("{}").unwrap();
     assert!(!ready.ready);
     assert_eq!(ready.protocol, None);
-    assert!(ready.backends.is_empty());
+    assert_eq!(ready.backends.len(), 0);
     assert_eq!(ready.error, None);
 }
 
