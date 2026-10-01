@@ -7,7 +7,7 @@ use super::{WORKER_PROTOCOL_VERSION, WorkerHarness};
 fn a_new_harness_announces_the_compiled_in_protocol() {
     let harness = WorkerHarness::new("pool_worker.py", "# ...", "python");
     assert_eq!(harness.protocol_version, WORKER_PROTOCOL_VERSION);
-    assert!(harness.args_before_script.is_empty());
+    assert_eq!(harness.args_before_script.len(), 0);
 }
 
 #[test]

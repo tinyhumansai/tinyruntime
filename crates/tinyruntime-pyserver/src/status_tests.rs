@@ -8,7 +8,7 @@ fn a_disabled_status_carries_its_reason_and_no_backends() {
     let status = ServerStatus::disabled("has not started");
     assert!(!status.enabled);
     assert!(!status.running);
-    assert!(status.backends.is_empty());
+    assert_eq!(status.backends.len(), 0);
     assert_eq!(status.message.as_deref(), Some("has not started"));
 }
 

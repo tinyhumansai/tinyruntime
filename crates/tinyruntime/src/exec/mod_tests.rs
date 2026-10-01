@@ -34,7 +34,7 @@ async fn an_engine_routing_nothing_has_an_empty_registry() {
         scratch.path().to_path_buf(),
     );
     assert!(engine.registry().is_empty());
-    assert!(engine.pool_stats().await.is_empty());
+    assert_eq!(engine.pool_stats().await.len(), 0);
 }
 
 #[tokio::test]
@@ -77,7 +77,7 @@ async fn executing_an_unprovisioned_language_fails_before_a_pool_is_built() {
         .expect_err("nothing to run on");
 
     assert!(matches!(error, Error::Download { .. }), "got {error:?}");
-    assert!(engine.pool_stats().await.is_empty());
+    assert_eq!(engine.pool_stats().await.len(), 0);
 }
 
 #[tokio::test]
@@ -257,5 +257,5 @@ async fn a_failing_job_comes_back_as_output_rather_than_an_error() {
 async fn pool_stats_are_empty_until_something_runs() {
     let scratch = tempfile::tempdir().unwrap();
     let engine = engine_over(worker_provider(), scratch.path());
-    assert!(engine.pool_stats().await.is_empty());
+    assert_eq!(engine.pool_stats().await.len(), 0);
 }

@@ -1224,7 +1224,7 @@ dependencies = [
 
 [[package]]
 name = "tinyruntime"
-version = "0.2.8"
+version = "0.2.9"
 dependencies = [
  "async-trait",
  "dirs",
@@ -1250,7 +1250,7 @@ dependencies = [
 
 [[package]]
 name = "tinyruntime-bus"
-version = "0.2.8"
+version = "0.2.9"
 dependencies = [
  "serde",
  "serde_json",
@@ -1258,7 +1258,7 @@ dependencies = [
 
 [[package]]
 name = "tinyruntime-pyserver"
-version = "0.2.8"
+version = "0.2.9"
 dependencies = [
  "serde",
  "serde_json",
