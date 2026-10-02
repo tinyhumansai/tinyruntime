@@ -149,4 +149,5 @@ pub const PROVIDER_METHODS: &[&str] = &[
 ];
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

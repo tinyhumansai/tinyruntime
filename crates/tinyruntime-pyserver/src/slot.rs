@@ -199,5 +199,5 @@ async fn build(prepare: Launching<'_>) -> Result<Arc<PythonServer>> {
 }
 
 #[cfg(test)]
-#[path = "slot_test.rs"]
+#[path = "slot_tests.rs"]
 mod tests;

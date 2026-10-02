@@ -326,5 +326,5 @@ async fn spawn_inner(launch: &ServerLaunch) -> Result<Inner> {
 }
 
 #[cfg(test)]
-#[path = "server_test.rs"]
+#[path = "server_tests.rs"]
 mod tests;

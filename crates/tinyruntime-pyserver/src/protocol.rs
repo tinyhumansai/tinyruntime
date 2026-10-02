@@ -69,5 +69,5 @@ pub struct ServerResponse {
 }
 
 #[cfg(test)]
-#[path = "protocol_test.rs"]
+#[path = "protocol_tests.rs"]
 mod tests;

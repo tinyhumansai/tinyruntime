@@ -136,5 +136,5 @@ impl Provider for BusProvider {
 }
 
 #[cfg(test)]
-#[path = "bus_test.rs"]
+#[path = "bus_tests.rs"]
 mod test;

@@ -91,5 +91,5 @@ pub async fn materialise(root: &Path, harness: &WorkerHarness) -> Result<PathBuf
 }
 
 #[cfg(test)]
-#[path = "env_test.rs"]
+#[path = "env_tests.rs"]
 mod test;

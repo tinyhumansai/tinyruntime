@@ -10,4 +10,5 @@ mod types;
 pub use types::{PoolSettings, PoolStats, PoolStatsResponse};
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

@@ -42,5 +42,5 @@ impl ServerStatus {
 }
 
 #[cfg(test)]
-#[path = "status_test.rs"]
+#[path = "status_tests.rs"]
 mod tests;

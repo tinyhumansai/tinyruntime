@@ -173,4 +173,5 @@ pub(crate) fn verify_contract(language: &Language, descriptor: &ProviderDescript
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

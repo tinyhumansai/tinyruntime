@@ -418,5 +418,5 @@ fn no_console_window(command: &mut Command) {
 fn no_console_window(_command: &mut Command) {}
 
 #[cfg(test)]
-#[path = "worker_test.rs"]
+#[path = "worker_tests.rs"]
 mod test;

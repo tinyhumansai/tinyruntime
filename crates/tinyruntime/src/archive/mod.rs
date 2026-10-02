@@ -116,4 +116,5 @@ fn install_error(language: &tinyruntime_bus::Language, error: &io::Error) -> Err
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;
