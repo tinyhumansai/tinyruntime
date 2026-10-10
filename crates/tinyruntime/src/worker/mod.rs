@@ -58,6 +58,12 @@ impl State {
 enum Command {
     #[cfg(test)]
     FailReap(oneshot::Sender<()>),
+    #[cfg(test)]
+    GateReap(
+        Arc<tokio::sync::Notify>,
+        Arc<tokio::sync::Notify>,
+        oneshot::Sender<()>,
+    ),
     Start(oneshot::Sender<WorkerOutcome>),
     Request(WorkerRequest, Instant, oneshot::Sender<WorkerOutcome>),
 }

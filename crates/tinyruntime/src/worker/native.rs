@@ -3,6 +3,8 @@ use std::path::Path;
 use std::process::Stdio;
 
 use command_group::{AsyncCommandGroup, AsyncGroupChild};
+use futures_util::FutureExt;
+use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{ChildStderr, ChildStdin, ChildStdout, Command};
@@ -57,12 +59,107 @@ fn command(plan: &WorkerCommand, root: &Path) -> Command {
     cmd
 }
 
+/// The task owns the group throughout command-group's uncancelled native wait.
+/// Keeping its handle here also retains any Windows completion-port waiter.
+#[derive(Debug)]
+enum Reaper {
+    Waiting(JoinHandle<(AsyncGroupChild, Result<(), &'static str>)>),
+    // A runtime-aborted task cannot prove cleanup. Never acknowledge it as reaped.
+    Lost,
+}
+
+#[cfg(test)]
+type ReapGate = (
+    std::sync::Arc<tokio::sync::Notify>,
+    std::sync::Arc<tokio::sync::Notify>,
+);
+
+async fn reap(
+    child: &mut Option<AsyncGroupChild>,
+    reaping: &mut Option<Reaper>,
+    #[cfg(test)] gate: &mut Option<ReapGate>,
+    #[cfg(test)] fail_wait: bool,
+) -> Result<(), &'static str> {
+    if reaping.is_none()
+        && let Some(mut owned) = child.take()
+    {
+        let _ = owned.start_kill();
+        #[cfg(test)]
+        let gate = gate.take();
+        *reaping = Some(Reaper::Waiting(tokio::spawn(async move {
+            #[cfg(test)]
+            if let Some((entered, release)) = gate {
+                entered.notify_one();
+                release.notified().await;
+            }
+            #[cfg(test)]
+            if fail_wait {
+                return (owned, Err("reap_failed"));
+            }
+            // Catch a native wait panic while the outer task still owns Child,
+            // so callers can retry rather than losing the resource to unwinding.
+            let result = AssertUnwindSafe(owned.wait()).catch_unwind().await;
+            let result = match result {
+                Ok(Ok(_)) => Ok(()),
+                _ => Err("reap_failed"),
+            };
+            (owned, result)
+        })));
+    }
+    match reaping {
+        Some(Reaper::Waiting(task)) => {
+            if let Ok((owned, result)) = task.await {
+                *reaping = None;
+                if result.is_err() {
+                    *child = Some(owned);
+                }
+                result
+            } else {
+                *reaping = Some(Reaper::Lost);
+                Err("reap_task_failed")
+            }
+        }
+        Some(Reaper::Lost) => Err("reap_task_failed"),
+        None => Ok(()),
+    }
+}
+
+fn cleanup_on_drop(
+    child: Option<AsyncGroupChild>,
+    reaping: Option<Reaper>,
+    stderr: Option<JoinHandle<()>>,
+) {
+    let child = child.map(|mut child| {
+        let _ = child.start_kill();
+        child
+    });
+    if let Some(task) = &stderr {
+        task.abort();
+    }
+    if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+        runtime.spawn(async move {
+            if let Some(mut child) = child {
+                let _ = child.wait().await;
+            }
+            if let Some(Reaper::Waiting(task)) = reaping {
+                let _ = task.await;
+            }
+            if let Some(task) = stderr {
+                let _ = task.await;
+            }
+        });
+    }
+}
+
 /// Process ownership survives cancellation of handshake/request futures.
 #[derive(Debug)]
 pub(super) struct Process {
     child: Option<AsyncGroupChild>,
+    reaping: Option<Reaper>,
     #[cfg(test)]
     pub(super) reap_failures: usize,
+    #[cfg(test)]
+    pub(super) reap_gate: Option<ReapGate>,
     stdin: ChildStdin,
     stdout: BufReader<ChildStdout>,
     stderr: Option<JoinHandle<()>>,
@@ -97,8 +194,11 @@ impl Process {
         });
         Ok(Self {
             child: Some(child),
+            reaping: None,
             #[cfg(test)]
             reap_failures: 0,
+            #[cfg(test)]
+            reap_gate: None,
             stdin,
             stdout: BufReader::new(stdout),
             stderr,
@@ -148,45 +248,33 @@ impl Process {
 
     /// Kills the entire native group/job, reaps, then joins pipe ownership.
     pub(super) async fn cleanup(&mut self) -> Result<(), &'static str> {
-        if let Some(mut child) = self.child.take() {
-            // Already exited groups can reject the signal; wait remains required.
-            let _ = child.start_kill();
-            #[cfg(test)]
-            if self.reap_failures > 0 {
-                self.reap_failures -= 1;
-                self.child = Some(child);
-                return Err("reap_failed");
-            }
-            if child.wait().await.is_err() {
-                self.child = Some(child);
-                return Err("reap_failed");
-            }
+        #[cfg(test)]
+        let fail_wait = self.child.is_some() && self.reap_failures > 0;
+        #[cfg(test)]
+        if fail_wait {
+            self.reap_failures -= 1;
         }
-        if let Some(task) = self.stderr.take() {
+        reap(
+            &mut self.child,
+            &mut self.reaping,
+            #[cfg(test)]
+            &mut self.reap_gate,
+            #[cfg(test)]
+            fail_wait,
+        )
+        .await?;
+        if let Some(task) = self.stderr.as_mut() {
             task.abort();
             let _ = task.await;
         }
+        self.stderr = None;
         Ok(())
     }
 }
 
 impl Drop for Process {
     fn drop(&mut self) {
-        if let Some(mut child) = self.child.take() {
-            let _ = child.start_kill();
-            let stderr = self.stderr.take();
-            if let Ok(runtime) = tokio::runtime::Handle::try_current() {
-                runtime.spawn(async move {
-                    let _ = child.wait().await;
-                    if let Some(task) = stderr {
-                        task.abort();
-                        let _ = task.await;
-                    }
-                });
-            } else if let Some(task) = stderr {
-                task.abort();
-            }
-        }
+        cleanup_on_drop(self.child.take(), self.reaping.take(), self.stderr.take());
     }
 }
 
@@ -194,6 +282,9 @@ impl Drop for Process {
 #[derive(Debug)]
 pub(super) struct Preparation {
     child: Option<AsyncGroupChild>,
+    reaping: Option<Reaper>,
+    #[cfg(test)]
+    reap_gate: Option<ReapGate>,
     stdout: Option<ChildStdout>,
     stderr: Option<ChildStderr>,
 }
@@ -211,6 +302,9 @@ impl Preparation {
         let stderr = child.inner().stderr.take();
         Ok(Self {
             child: Some(child),
+            reaping: None,
+            #[cfg(test)]
+            reap_gate: None,
             stdout,
             stderr,
         })
@@ -237,10 +331,12 @@ impl Preparation {
         if result.is_err() {
             let _ = child.start_kill();
         }
+        // Tokio direct-child wait is cancellation-safe. Group/job wait is always
+        // performed by the owned, uncancelled cleanup task below and by Actor.
         let wait = tokio::select! {
             biased;
             () = canceled(stop) => Err("canceled"),
-            result = tokio::time::timeout_at(deadline, child.wait()) =>
+            result = tokio::time::timeout_at(deadline, child.inner().wait()) =>
                 result.map_err(|_| "prepare_timeout").and_then(|s| s.map_err(|_| "prepare_reap_failed")),
         };
         if wait.is_err() {
@@ -255,11 +351,16 @@ impl Preparation {
     }
 
     pub(super) async fn cleanup(&mut self) -> Result<(), &'static str> {
-        if let Some(child) = self.child.as_mut() {
-            let _ = child.start_kill();
-            child.wait().await.map_err(|_| "prepare_reap_failed")?;
-        }
-        self.child = None;
+        reap(
+            &mut self.child,
+            &mut self.reaping,
+            #[cfg(test)]
+            &mut self.reap_gate,
+            #[cfg(test)]
+            false,
+        )
+        .await
+        .map_err(|_| "prepare_reap_failed")?;
         self.stdout = None;
         self.stderr = None;
         Ok(())
@@ -268,14 +369,7 @@ impl Preparation {
 
 impl Drop for Preparation {
     fn drop(&mut self) {
-        if let Some(mut child) = self.child.take() {
-            let _ = child.start_kill();
-            if let Ok(runtime) = tokio::runtime::Handle::try_current() {
-                runtime.spawn(async move {
-                    let _ = child.wait().await;
-                });
-            }
-        }
+        cleanup_on_drop(self.child.take(), self.reaping.take(), None);
     }
 }
 

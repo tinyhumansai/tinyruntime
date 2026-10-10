@@ -680,3 +680,75 @@ async fn failed_request_restarts_once_without_translating_the_jsonl_method() {
     );
     manager.stop(&handle).await;
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn request_deadline_during_idle_cleanup_keeps_stop_and_shutdown_waiting() {
+    let root = tempfile::tempdir().unwrap();
+    let manager = WorkerManager::new(root.path().to_path_buf());
+    let handle = manager.reserve().await.unwrap();
+    let mut launch = plan(HEALTHY);
+    launch.idle_backend = Some("alpha".into());
+    launch.idle_timeout_ms = 100;
+    launch.request_timeout_ms = 1000;
+    manager
+        .prepare(WorkerPrepare {
+            handle: handle.clone(),
+            plan: launch,
+        })
+        .await;
+    assert_eq!(
+        manager.start(&handle).await.kind,
+        WorkerOutcomeKind::Complete
+    );
+    let entered = Arc::new(tokio::sync::Notify::new());
+    let release = Arc::new(tokio::sync::Notify::new());
+    let (reply, response) = oneshot::channel();
+    manager.book.lock().await.slots[&handle]
+        .commands
+        .as_ref()
+        .unwrap()
+        .send(Command::GateReap(entered.clone(), release.clone(), reply))
+        .await
+        .unwrap();
+    response.await.unwrap();
+    tokio::time::pause();
+    tokio::time::advance(Duration::from_secs(1)).await;
+    let pending = {
+        let manager = manager.clone();
+        let handle = handle.clone();
+        tokio::spawn(async move {
+            manager
+                .request(WorkerRequest {
+                    handle,
+                    operation: 1,
+                    method: "alpha.run".into(),
+                    params: serde_json::Value::Null,
+                })
+                .await
+        })
+    };
+    entered.notified().await;
+    tokio::time::advance(Duration::from_secs(2)).await;
+    assert_eq!(
+        pending.await.unwrap().reason.as_deref(),
+        Some("request_timeout")
+    );
+    let stop_ready = tokio::time::timeout(Duration::from_secs(1), manager.stop(&handle))
+        .await
+        .is_ok();
+    let shutdown_ready = tokio::time::timeout(Duration::from_secs(1), manager.shutdown())
+        .await
+        .is_ok();
+    release.notify_one();
+    assert_eq!(manager.shutdown().await.kind, WorkerOutcomeKind::Complete);
+    assert!(
+        !stop_ready,
+        "Stop must await the native cleanup canceled by Request"
+    );
+    assert!(
+        !shutdown_ready,
+        "Shutdown must await that same outstanding native cleanup"
+    );
+    assert!(manager.book.lock().await.slots.is_empty());
+}

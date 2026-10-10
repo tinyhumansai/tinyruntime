@@ -104,6 +104,13 @@ impl Actor {
                     }
                     let _ = reply.send(());
                 }
+                #[cfg(test)]
+                Command::GateReap(entered, release, reply) => {
+                    if let Some(process) = &mut self.process {
+                        process.reap_gate = Some((entered, release));
+                    }
+                    let _ = reply.send(());
+                }
                 Command::Start(reply) => {
                     let _ = reply.send(self.start().await);
                 }
