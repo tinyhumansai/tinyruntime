@@ -127,3 +127,5 @@ pub use resolve::{
 };
 pub use settings::RuntimeSettings;
 pub use version::{CONTRACT_VERSION, is_compatible};
+
+pub mod worker;

@@ -43,7 +43,14 @@ fn every_router_member_is_listed_once() {
             methods::LANGUAGES,
             methods::RESOLVE,
             methods::EXECUTE,
-            methods::POOL_STATS
+            methods::POOL_STATS,
+            methods::WORKER_RESERVE,
+            methods::WORKER_PREPARE,
+            methods::WORKER_START,
+            methods::WORKER_REQUEST,
+            methods::WORKER_STATUS,
+            methods::WORKER_STOP,
+            methods::WORKER_SHUTDOWN,
         ]
     );
     let mut sorted = METHODS.to_vec();

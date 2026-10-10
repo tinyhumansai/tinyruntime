@@ -27,3 +27,10 @@ fn a_different_major_never_binds() {
     assert!(!binds((1, 0), (0, 9)));
     assert!(!binds((2, 0), (1, 9)));
 }
+
+#[test]
+fn router_only_additions_keep_old_provider_vocabulary_usable() {
+    assert!(super::provider_is_compatible((1, 0)));
+    assert!(!is_compatible((1, 0)));
+    assert!(!super::provider_is_compatible((2, 0)));
+}
