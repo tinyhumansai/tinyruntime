@@ -131,6 +131,7 @@ fn config_routing_node(harness_dir: &std::path::Path) -> ModuleConfig {
     ModuleConfig {
         providers: vec![ProviderRoute::new(Language::nodejs(), FAKE_BUS_NAME)],
         harness_dir: harness_dir.to_string_lossy().into_owned(),
+        worker_cache_scopes: Vec::new(),
     }
 }
 
@@ -352,6 +353,7 @@ async fn each_provider_is_addressed_at_its_own_object_path() -> TinyBusResult<()
                 ProviderRoute::new(Language::python(), names::providers::PYTHON),
             ],
             harness_dir: scratch.path().to_string_lossy().into_owned(),
+            worker_cache_scopes: Vec::new(),
         },
     )
     .await?;
@@ -505,7 +507,18 @@ async fn generic_persistent_worker_members_dispatch_real_jsonl_and_cleanup() -> 
     let bus = bus();
     let scratch = tempfile::tempdir().unwrap();
     let module = Connection::connect(bus.connect().await?).await?;
-    setup(module, config_routing_node(scratch.path())).await?;
+    let mut config = config_routing_node(scratch.path());
+    config.worker_cache_scopes = vec![tinyruntime_bus::worker::WorkerCacheScope {
+        id: "cache".into(),
+        root: scratch
+            .path()
+            .canonicalize()
+            .unwrap()
+            .join("recipe-cache")
+            .to_string_lossy()
+            .into_owned(),
+    }];
+    setup(module, config).await?;
     let client = Connection::connect(bus.connect().await?).await?;
     let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
     let handle: WorkerHandle = proxy.call(names::methods::WORKER_RESERVE, ()).await?;
@@ -534,7 +547,7 @@ done
             names::methods::WORKER_PREPARE,
             (WorkerPrepare {
                 handle: handle.clone(),
-                plan,
+                plan: plan.clone(),
             },),
         )
         .await?;
@@ -573,5 +586,74 @@ done
             .await
             .is_err()
     );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn cached_worker_member_publishes_exact_marker_bytes() -> TinyBusResult<()> {
+    use tinyruntime_bus::worker::{
+        WorkerCommand, WorkerHandle, WorkerOutcome, WorkerOutcomeKind, WorkerPlan,
+        WorkerPrepareCached,
+    };
+    let scratch = tempfile::tempdir().unwrap();
+    let bus = bus();
+    let module = Connection::connect(bus.connect().await?).await?;
+    let mut config = config_routing_node(scratch.path());
+    config.worker_cache_scopes = vec![tinyruntime_bus::worker::WorkerCacheScope {
+        id: "cache".into(),
+        root: scratch
+            .path()
+            .canonicalize()
+            .unwrap()
+            .join("recipe-cache")
+            .to_string_lossy()
+            .into_owned(),
+    }];
+    setup(module, config).await?;
+    let client = Connection::connect(bus.connect().await?).await?;
+    let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    let handle: WorkerHandle = proxy.call(names::methods::WORKER_RESERVE, ()).await?;
+    let prepared: WorkerOutcome = proxy
+        .call(
+            names::methods::WORKER_PREPARE_CACHED,
+            (WorkerPrepareCached {
+                handle: handle.clone(),
+                plan: WorkerPlan {
+                    source: "exit 0".into(),
+                    command: WorkerCommand {
+                        executable: "/bin/sh".into(),
+                        args: Vec::new(),
+                        env: Vec::new(),
+                    },
+                    preparation: Vec::new(),
+                    backends: Vec::new(),
+                    startup_timeout_ms: 1000,
+                    request_timeout_ms: 1000,
+                    idle_backend: None,
+                    idle_timeout_ms: 0,
+                },
+                recipe: tinyruntime_bus::worker::CacheRecipe {
+                    scope: "cache".into(),
+                    artifacts: Vec::new(),
+                    steps: Vec::new(),
+                    required: Vec::new(),
+                    marker: tinyruntime_bus::worker::CacheArtifact {
+                        path: "ready".into(),
+                        bytes: b"exact".to_vec(),
+                    },
+                    adoption: tinyruntime_bus::worker::CacheAdoptionPolicy::Strict,
+                    timeout_ms: 1000,
+                },
+            },),
+        )
+        .await?;
+    assert_eq!(prepared.kind, WorkerOutcomeKind::Complete);
+    assert_eq!(
+        std::fs::read(scratch.path().join("recipe-cache/ready")).unwrap(),
+        b"exact"
+    );
+    let stopped: WorkerOutcome = proxy.call(names::methods::WORKER_STOP, (handle,)).await?;
+    assert_eq!(stopped.kind, WorkerOutcomeKind::Complete);
     Ok(())
 }

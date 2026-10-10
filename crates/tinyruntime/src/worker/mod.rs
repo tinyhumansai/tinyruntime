@@ -5,6 +5,7 @@
 //! supervisor's native and pipe cleanup before acknowledging completion.
 
 mod actor;
+mod cache;
 mod native;
 mod validate;
 
@@ -14,8 +15,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 pub use tinyruntime_bus::worker::{
-    ServerStatus, WorkerHandle, WorkerOutcome, WorkerOutcomeKind, WorkerPhase, WorkerPlan,
-    WorkerPrepare, WorkerRequest, WorkerStatus,
+    CacheRecipe, ServerStatus, WorkerCacheScope, WorkerHandle, WorkerOutcome, WorkerOutcomeKind,
+    WorkerPhase, WorkerPlan, WorkerPrepare, WorkerPrepareCached, WorkerRequest, WorkerStatus,
 };
 use tokio::sync::{Mutex, mpsc, oneshot, watch};
 use tokio::time::Instant;
@@ -68,10 +69,17 @@ enum Command {
     Request(WorkerRequest, Instant, oneshot::Sender<WorkerOutcome>),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Cached {
+    recipe: Arc<CacheRecipe>,
+    root: PathBuf,
+}
+
 #[derive(Debug)]
 struct Slot {
     reserved_at: Instant,
     plan: Option<Arc<WorkerPlan>>,
+    cached: Option<Cached>,
     commands: Option<mpsc::Sender<Command>>,
     stop: watch::Sender<bool>,
     state: watch::Sender<State>,
@@ -96,6 +104,7 @@ struct Book {
 pub struct WorkerManager {
     book: Arc<Mutex<Book>>,
     root: PathBuf,
+    cache_scopes: Arc<HashMap<String, PathBuf>>,
 }
 
 impl WorkerManager {
@@ -104,6 +113,7 @@ impl WorkerManager {
     pub fn new(root: PathBuf) -> Self {
         Self {
             root,
+            cache_scopes: Arc::new(HashMap::new()),
             book: Arc::new(Mutex::new(Book {
                 nonce: uuid::Uuid::new_v4().to_string(),
                 issued: 0,
@@ -111,6 +121,24 @@ impl WorkerManager {
                 slots: HashMap::new(),
             })),
         }
+    }
+
+    /// Approve explicit named persistent cache scopes without performing I/O.
+    ///
+    /// # Errors
+    /// Rejects invalid/credential roots, duplicate or overlapping scopes and excess scopes.
+    pub fn with_cache_scopes(
+        mut self,
+        scopes: Vec<WorkerCacheScope>,
+    ) -> crate::error::Result<Self> {
+        cache::scopes(&scopes).map_err(crate::error::Error::CacheScope)?;
+        self.cache_scopes = Arc::new(
+            scopes
+                .into_iter()
+                .map(|scope| (scope.id, PathBuf::from(scope.root)))
+                .collect(),
+        );
+        Ok(self)
     }
 
     /// Reserve a handle without claiming an interpreter/device or spawning.
@@ -141,6 +169,7 @@ impl WorkerManager {
             Slot {
                 reserved_at: Instant::now(),
                 plan: None,
+                cached: None,
                 commands: None,
                 stop,
                 state,
@@ -168,6 +197,33 @@ impl WorkerManager {
     /// Install/execute a bounded plan under the already-known handle.
     /// Identical retries observe the same preparation; conflicting retries fail.
     pub async fn prepare(&self, request: WorkerPrepare) -> WorkerOutcome {
+        self.prepare_inner(request, None).await
+    }
+
+    /// Prepare through a bounded recipe under a host-approved persistent scope.
+    /// Identical retries observe one immutable attempt; stop/fresh reserve retries failures.
+    pub async fn prepare_cached(&self, request: WorkerPrepareCached) -> WorkerOutcome {
+        if let Err(reason) = cache::recipe(&request.recipe) {
+            return outcome(WorkerOutcomeKind::Invalid, Some(reason));
+        }
+        let Some(root) = self.cache_scopes.get(&request.recipe.scope) else {
+            return outcome(WorkerOutcomeKind::Invalid, Some("cache_scope_unapproved"));
+        };
+        let cached = Cached {
+            recipe: Arc::new(request.recipe),
+            root: root.clone(),
+        };
+        self.prepare_inner(
+            WorkerPrepare {
+                handle: request.handle,
+                plan: request.plan,
+            },
+            Some(cached),
+        )
+        .await
+    }
+
+    async fn prepare_inner(&self, request: WorkerPrepare, cached: Option<Cached>) -> WorkerOutcome {
         if let Err(reason) = validate::plan(&request.plan) {
             return outcome(WorkerOutcomeKind::Invalid, Some(reason));
         }
@@ -183,7 +239,7 @@ impl WorkerManager {
                 return outcome(WorkerOutcomeKind::Closed, None);
             }
             if let Some(plan) = &slot.plan {
-                if **plan != request.plan {
+                if **plan != request.plan || slot.cached != cached {
                     return outcome(WorkerOutcomeKind::Invalid, Some("plan_conflict"));
                 }
             } else {
@@ -194,11 +250,13 @@ impl WorkerManager {
                 let (tx, rx) = mpsc::channel(QUEUE);
                 let root = self.root.join(request.handle.0.replace(':', "_"));
                 slot.plan = Some(plan.clone());
+                slot.cached = cached.clone();
                 slot.commands = Some(tx);
                 slot.state.send_replace(State::new(WorkerPhase::Preparing));
                 tokio::spawn(actor::run(
                     plan,
                     root,
+                    cached,
                     rx,
                     slot.stop.subscribe(),
                     slot.state.clone(),
@@ -364,3 +422,7 @@ async fn wait_closed(state: &mut watch::Receiver<State>) -> bool {
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "cache_tests.rs"]
+mod cache_tests;

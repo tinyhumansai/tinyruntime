@@ -1,13 +1,18 @@
 # Follow-up: Python preparation and TinyJuice ML recipes
 
-This generic slice accepts `WorkerPrepare { handle, plan }`. The plan contains
+The generic worker slice accepts `WorkerPrepare { handle, plan }`. The plan contains
 bounded script bytes, an explicit absolute executable, arguments before the
 installed script, explicit environment, ordered backend ids, bounded native
 preparation commands and startup/request/idle settings. The router executes
 preparation in its owned per-handle directory and appends the installed script
-path to the final worker command. There is no implicit executable fallback,
-provider recipe member, package resolver, persistent provisioning marker or
-cached-model interpretation in this slice.
+path to the final worker command. The router also accepts
+`WorkerPrepareCached { handle, plan, recipe }` over the separate cache member.
+Hosts approve named absolute cache scopes at module load. Recipes describe exact
+artifact and marker bytes, required entries, native preparation commands, and
+an explicit strict-by-default legacy adoption policy. The router owns bounded
+no-follow file access, cross-process locking, recipe identity, native command
+supervision and readiness publication. There is no implicit executable
+fallback, package resolver or cached-model interpretation in this slice.
 
 The root still owns the following implementation until later adapter switches:
 
@@ -26,12 +31,12 @@ preparation vocabulary in router-owned `tinyruntime-bus`, publish it canonically
 then update the provider's pinned contract separately. Do not duplicate payload
 structs or edit the provider's vendored runtime checkout to bypass that ordering.
 
-Preserve existing cache locations and readiness marker contents, installation
-locking, stable backend order, cached provisioning and offline model-load flags.
-The generic manager's transient script directory is not yet the persistent
-venv/model cache abstraction; design a bounded, owned provisioning/cache recipe
-before switching hosts. Python-specific path and package conventions belong to
-the provider, while model readiness and compressor knowledge belong to TinyJuice.
+The generic cache recipe can preserve existing cache locations and marker bytes,
+but the Python provider and TinyJuice recipes have not been integrated yet.
+Preserve installation locking, stable backend order, cached provisioning and
+offline model-load flags during those owner slices. Python-specific path and
+package conventions belong to the provider, while model readiness and
+compressor knowledge belong to TinyJuice.
 
 The two protocols stay distinct. Warm code jobs use authenticated loopback
 `JobRequest { code, cwd, timeout_ms }`. Persistent backend workers use stdio

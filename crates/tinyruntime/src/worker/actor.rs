@@ -13,8 +13,9 @@ use tinyruntime_bus::worker::{
 use tokio::sync::{mpsc, watch};
 use tokio::time::Instant;
 
+use super::cache::Session;
 use super::native::{self, Preparation, Process};
-use super::{Command, State, outcome};
+use super::{Cached, Command, State, outcome};
 
 const REPLAY_WINDOW: u64 = 8;
 const BACKOFF: Duration = Duration::from_secs(300);
@@ -24,6 +25,8 @@ struct Actor {
     root: PathBuf,
     process: Option<Process>,
     preparation: Option<Preparation>,
+    cached: Option<Cached>,
+    cache: Option<Session>,
     ready_backends: Vec<String>,
     last_used: Instant,
     retry_after: Option<Instant>,
@@ -36,6 +39,7 @@ struct Actor {
 pub(super) async fn run(
     plan: Arc<WorkerPlan>,
     root: PathBuf,
+    cached: Option<Cached>,
     mut commands: mpsc::Receiver<Command>,
     stop: watch::Receiver<bool>,
     state: watch::Sender<State>,
@@ -45,6 +49,8 @@ pub(super) async fn run(
         root,
         process: None,
         preparation: None,
+        cached,
+        cache: None,
         ready_backends: Vec::new(),
         last_used: Instant::now(),
         retry_after: None,
@@ -120,7 +126,73 @@ impl Actor {
             }
         }
     }
+    async fn prepare_cache(&mut self) -> Result<(), &'static str> {
+        let Some(cached) = self.cached.clone() else {
+            return Ok(());
+        };
+        let deadline = Instant::now() + Duration::from_millis(cached.recipe.timeout_ms);
+        self.cache =
+            Some(Session::acquire(&cached.root, &cached.recipe, &mut self.stop, deadline).await?);
+        let result = self.provision_cache(&cached, deadline).await;
+        // Native failures keep the preparation + session owned for public Stop retry.
+        if let Some(preparation) = &mut self.preparation {
+            preparation.cleanup().await?;
+        }
+        self.preparation = None;
+        if let Some(cache) = &mut self.cache {
+            cache.cleanup()?;
+        }
+        self.cache = None;
+        result
+    }
+
+    async fn provision_cache(
+        &mut self,
+        cached: &Cached,
+        deadline: Instant,
+    ) -> Result<(), &'static str> {
+        let session = self.cache.as_mut().ok_or("cache_session_missing")?;
+        if session.legacy {
+            return session.adopt_legacy(&cached.recipe);
+        }
+        if session.cached {
+            return Ok(());
+        }
+        session.install(&cached.recipe)?;
+        for step in &cached.recipe.steps {
+            if *self.stop.borrow() {
+                return Err("canceled");
+            }
+            if Instant::now() >= deadline {
+                return Err("cache_timeout");
+            }
+            self.cache
+                .as_ref()
+                .ok_or("cache_session_missing")?
+                .check_binding()?;
+            self.preparation = Some(Preparation::spawn(step, &cached.root)?);
+            let preparation = self.preparation.as_mut().ok_or("prepare_closed")?;
+            let result = preparation.execute(&mut self.stop, deadline).await;
+            preparation.cleanup().await?;
+            self.preparation = None;
+            result?;
+        }
+        if *self.stop.borrow() {
+            return Err("canceled");
+        }
+        if Instant::now() >= deadline {
+            return Err("cache_timeout");
+        }
+        self.cache
+            .as_ref()
+            .ok_or("cache_session_missing")?
+            .publish(&cached.recipe)
+    }
+
     async fn prepare(&mut self) -> WorkerOutcome {
+        if let Err(reason) = self.prepare_cache().await {
+            return outcome(WorkerOutcomeKind::Failed, Some(reason));
+        }
         let deadline = Instant::now() + Duration::from_millis(self.plan.startup_timeout_ms);
         if tokio::fs::create_dir_all(&self.root).await.is_err()
             || tokio::fs::write(self.root.join("worker-script"), &self.plan.source)
@@ -157,6 +229,10 @@ impl Actor {
             process.cleanup().await?;
         }
         self.preparation = None;
+        if let Some(cache) = &mut self.cache {
+            cache.cleanup()?;
+        }
+        self.cache = None;
         if let Some(process) = &mut self.process {
             process.cleanup().await?;
         }

@@ -86,6 +86,14 @@ impl RuntimeService {
         Ok(self.workers.prepare(request).await)
     }
 
+    /// Provision a host-approved persistent cache then prepare a known worker.
+    async fn worker_prepare_cached(
+        &self,
+        request: tinyruntime_bus::worker::WorkerPrepareCached,
+    ) -> TinyBusResult<tinyruntime_bus::worker::WorkerOutcome> {
+        Ok(self.workers.prepare_cached(request).await)
+    }
+
     /// Start only the known prepared resource.
     async fn worker_start(
         &self,
@@ -155,7 +163,9 @@ async fn setup(connection: Connection, config: ModuleConfig) -> TinyBusResult<()
     );
 
     let workers =
-        crate::worker::WorkerManager::new(config.harness_root().join("persistent-workers"));
+        crate::worker::WorkerManager::new(config.harness_root().join("persistent-workers"))
+            .with_cache_scopes(config.worker_cache_scopes.clone())
+            .map_err(|_| tinybus::Error::failed("cache_scope_configuration_invalid"))?;
     let engine = Arc::new(Engine::new(
         registry,
         reqwest::Client::new(),
@@ -182,7 +192,7 @@ pub(crate) mod exports {
         config = ModuleConfig,
         worker_threads = 2,
         provides = ["ai.tinyhumans.runtime.Runtime"],
-        methods = ["Languages", "Resolve", "Execute", "PoolStats", "WorkerReserve", "WorkerPrepare", "WorkerStart", "WorkerRequest", "WorkerStatus", "WorkerStop", "WorkerShutdown"],
+        methods = ["Languages", "Resolve", "Execute", "PoolStats", "WorkerReserve", "WorkerPrepare", "WorkerPrepareCached", "WorkerStart", "WorkerRequest", "WorkerStatus", "WorkerStop", "WorkerShutdown"],
         signals = [],
         requires = [],
         optional = ["ai.tinyhumans.runtime.Provider"],

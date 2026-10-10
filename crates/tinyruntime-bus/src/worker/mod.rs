@@ -1,4 +1,9 @@
 //! Generic persistent process plans and legacy JSONL/status vocabulary.
+mod cache;
+pub use cache::{
+    CacheAdoptionPolicy, CacheArtifact, CacheEntry, CacheEntryKind, CacheRecipe, WorkerCacheScope,
+    WorkerPrepareCached,
+};
 mod protocol;
 mod status;
 mod types;

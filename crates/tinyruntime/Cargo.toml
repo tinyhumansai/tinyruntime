@@ -18,6 +18,8 @@ publish = false
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
+cap-std = { workspace = true }
+cap-fs-ext = { workspace = true }
 futures-util = { workspace = true }
 command-group = { workspace = true }
 # The wire contract: member names, payload types, and the contract version.

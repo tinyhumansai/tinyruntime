@@ -4,7 +4,7 @@ use tinyruntime_bus::worker::{WorkerCommand, WorkerPlan, WorkerRequest};
 
 const MAX_SCRIPT: usize = 1024 * 1024;
 
-fn command(command: &WorkerCommand) -> Result<(), &'static str> {
+pub(super) fn command(command: &WorkerCommand) -> Result<(), &'static str> {
     if !std::path::Path::new(&command.executable).is_absolute()
         || command.executable.len() > 4096
         || command.executable.contains('\0')

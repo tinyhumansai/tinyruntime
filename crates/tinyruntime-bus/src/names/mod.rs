@@ -80,6 +80,9 @@ pub mod methods {
     /// Generic persistent worker lifecycle member `WorkerPrepare`.
     pub const WORKER_PREPARE: &str = "WorkerPrepare";
 
+    /// Prepare a known resource using an approved persistent cache recipe.
+    pub const WORKER_PREPARE_CACHED: &str = "WorkerPrepareCached";
+
     /// Generic persistent worker lifecycle member `WorkerStart`.
     pub const WORKER_START: &str = "WorkerStart";
 
@@ -157,6 +160,7 @@ pub const METHODS: &[&str] = &[
     methods::POOL_STATS,
     methods::WORKER_RESERVE,
     methods::WORKER_PREPARE,
+    methods::WORKER_PREPARE_CACHED,
     methods::WORKER_START,
     methods::WORKER_REQUEST,
     methods::WORKER_STATUS,

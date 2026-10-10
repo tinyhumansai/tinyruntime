@@ -36,6 +36,25 @@ Stop for sign-out if the process will reuse the module. Manager drop signals
 cleanup while the runtime is alive; abruptly stopping the runtime is not a
 replacement for the explicit shutdown barrier.
 
+Persistent cache preparation uses the separate `WorkerPrepareCached` member and
+an absolute scope approved by the host at module load. No scope is approved by
+default. The bounded recipe carries exact router-owned artifact bytes, trusted
+native preparation commands, required entries, exact marker bytes and an
+optional migration policy. The router holds a no-follow directory capability
+and OS lock through preparation and publication. It never moves a prepared
+environment from a staging path, because environment scripts may contain
+absolute paths.
+
+Cache reuse requires an exact recipe identity sidecar, marker, artifact bytes
+and required entries. The default `strict` policy rebuilds a complete old
+cache that has no sidecar. `adopt_verified_legacy` may publish an identity for
+an identity-free cache only when all existing marker, artifact and required
+entry checks pass under the lock; it runs no native commands. A mismatched
+identity always rebuilds. Failed rebuilds preserve the previous identity, so
+they cannot make a cache look legacy. See
+[`persistent-cache-recipes.md`](../../../../docs/specs/persistent-cache-recipes.md)
+for bounds and cleanup behavior.
+
 The legacy JSONL ready/request/response and backend/server status types have one
 definition in `tinyruntime-bus`; pyserver paths reexport those same definitions.
 The old linked pyserver, Python preparation descriptions, TinyJuice recipes and

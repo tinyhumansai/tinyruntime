@@ -37,6 +37,7 @@ manifest that disagreed with the object it exports.
 | `harness`   | the worker script a provider ships and the router runs         |
 | `exec`      | running code, and what came back                               |
 | `pool`      | warm-worker tuning and counters                                |
+| `worker`    | persistent JSONL process vocabulary and scoped cache recipes   |
 | `version`   | `CONTRACT_VERSION` and the bind rule both sides apply          |
 
 ## What is deliberately not here
@@ -44,6 +45,11 @@ manifest that disagreed with the object it exports.
 **No behaviour.** No process is spawned, no byte is downloaded, and no path is
 touched by anything in this crate. A payload type describes what a frame
 carries, not what a module does with it.
+
+Worker cache payloads are declarative vocabulary only: approved scope IDs,
+bounded artifact and required-entry descriptions, native command values,
+marker bytes, and adoption policy. Filesystem checks, recipe identity hashing,
+locking, process execution and publication stay in the router implementation.
 
 **No transport.** This crate does not depend on `tinybus` and holds no
 connection, client, or codec. A host already owns its connection — its reconnect

@@ -22,7 +22,7 @@ async fn retired_handles_do_not_exhaust_future_reservations() {
 }
 
 #[cfg(unix)]
-fn plan(source: &str) -> WorkerPlan {
+pub(super) fn plan(source: &str) -> WorkerPlan {
     WorkerPlan {
         source: source.into(),
         command: tinyruntime_bus::worker::WorkerCommand {
@@ -40,7 +40,7 @@ fn plan(source: &str) -> WorkerPlan {
 }
 
 #[cfg(unix)]
-const HEALTHY: &str = r#"
+pub(super) const HEALTHY: &str = r#"
 printf '%s\n' '{"ready":true,"protocol":1,"backends":["alpha"]}'
 count=0
 while IFS= read -r line; do
@@ -751,4 +751,33 @@ async fn request_deadline_during_idle_cleanup_keeps_stop_and_shutdown_waiting() 
         "Shutdown must await that same outstanding native cleanup"
     );
     assert!(manager.book.lock().await.slots.is_empty());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn unapproved_cache_scope_is_rejected_before_creating_any_cache_data() {
+    let root = tempfile::tempdir().unwrap();
+    let manager = WorkerManager::new(root.path().join("workers"));
+    let handle = manager.reserve().await.unwrap();
+    let result = manager
+        .prepare_cached(tinyruntime_bus::worker::WorkerPrepareCached {
+            handle: handle.clone(),
+            plan: plan(HEALTHY),
+            recipe: tinyruntime_bus::worker::CacheRecipe {
+                scope: "unapproved".into(),
+                artifacts: Vec::new(),
+                steps: Vec::new(),
+                required: Vec::new(),
+                marker: tinyruntime_bus::worker::CacheArtifact {
+                    path: "ready".into(),
+                    bytes: b"v1".to_vec(),
+                },
+                adoption: tinyruntime_bus::worker::CacheAdoptionPolicy::Strict,
+                timeout_ms: 1000,
+            },
+        })
+        .await;
+    assert_eq!(result.kind, WorkerOutcomeKind::Invalid);
+    assert!(!root.path().join("workers").exists());
+    manager.stop(&handle).await;
 }
