@@ -4,8 +4,9 @@ A host may approve named absolute cache scopes at module load. WorkerPrepareCach
 adds a known reservation, an unchanged worker plan and one declarative cache
 recipe; existing members keep their arities. No scopes are approved by default.
 Router contract 1.2 introduced this member; contract 1.3 adds optional provider
-preparation capability vocabulary and per-command deadlines. Unchanged
-providers remain compatible at 1.0.
+preparation capability vocabulary and per-command deadlines. Contract 1.4 adds
+the host-facing `PrepareEnvironment` bridge through the configured router.
+Unchanged providers remain compatible at 1.0.
 Legacy-cache adoption defaults to `strict`, including when the policy field is
 omitted from an older serialized recipe. A host may explicitly select
 `adopt_verified_legacy` during migration.

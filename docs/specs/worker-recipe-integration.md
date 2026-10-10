@@ -28,7 +28,10 @@ The root still owns the following implementation until later adapter switches:
 `tinyruntime-python` remains describe-only: no installation, archive downloads,
 cache writes or worker spawning. This router source slice defines an optional
 `prepare_environment` capability, host-selected setup inputs and provider-authored
-commands, plus optional per-command deadlines. Its descriptor field is omitted
+commands, plus optional per-command deadlines. Hosts call the additive Runtime
+`PrepareEnvironment` member with a language and generic request; the router
+alone follows its configured route and negotiates the provider capability. Its
+descriptor field is omitted
 when empty, so existing provider wire representations and the original five
 members remain usable. The canonical router source must be reviewed and made
 available before the standalone provider pins it; do not duplicate payload
