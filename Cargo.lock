@@ -116,6 +116,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "command-group"
+version = "5.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a68fa787550392a9d58f44c21a3022cfb3ea3e2458b7f85d3b399d0ceeccf409"
+dependencies = [
+ "async-trait",
+ "nix",
+ "tokio",
+ "winapi",
+]
+
+[[package]]
 name = "const-oid"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -736,6 +748,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "nix"
+version = "0.27.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2eb04e9c688eff1c89d72b407f168cf79bb9e867a9d3323ed6c01519eb9cc053"
+dependencies = [
+ "bitflags",
+ "cfg-if",
+ "libc",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1287,10 +1310,13 @@ name = "tinyruntime"
 version = "0.2.12"
 dependencies = [
  "async-trait",
+ "command-group",
  "dirs",
  "flate2",
  "fs2",
+ "futures-util",
  "hex",
+ "nix",
  "reqwest",
  "serde",
  "serde_json",
@@ -1324,6 +1350,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror",
+ "tinyruntime-bus",
  "tokio",
  "tracing",
 ]

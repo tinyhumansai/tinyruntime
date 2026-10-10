@@ -123,7 +123,11 @@ impl Route {
     /// a reason rather than as an error that hides every other language too.
     pub async fn status(&self) -> LanguageStatus {
         match self.provider.describe().await {
-            Ok(descriptor) if tinyruntime_bus::is_compatible(descriptor.contract_version) => {
+            Ok(descriptor)
+                if tinyruntime_bus::version::provider_is_compatible(
+                    descriptor.contract_version,
+                ) =>
+            {
                 LanguageStatus::available(
                     self.language.clone(),
                     self.bus_name.clone(),
@@ -161,7 +165,7 @@ impl Route {
 ///
 /// Returns [`Error::ProviderContract`] when the versions cannot bind.
 pub(crate) fn verify_contract(language: &Language, descriptor: &ProviderDescriptor) -> Result<()> {
-    if tinyruntime_bus::is_compatible(descriptor.contract_version) {
+    if tinyruntime_bus::version::provider_is_compatible(descriptor.contract_version) {
         return Ok(());
     }
     let (major, minor) = descriptor.contract_version;

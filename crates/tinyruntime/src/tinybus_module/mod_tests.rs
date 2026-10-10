@@ -137,6 +137,7 @@ fn config_routing_node(harness_dir: &std::path::Path) -> ModuleConfig {
 #[test]
 fn declared_methods_match_the_dispatch_table() {
     let service = RuntimeService {
+        workers: crate::worker::WorkerManager::new(std::path::PathBuf::from("unused-test-root")),
         engine: std::sync::Arc::new(Engine::new(
             Registry::new(),
             reqwest::Client::new(),
@@ -155,6 +156,7 @@ fn declared_methods_match_the_dispatch_table() {
 #[test]
 fn the_served_interface_name_matches_the_contract() {
     let service = RuntimeService {
+        workers: crate::worker::WorkerManager::new(std::path::PathBuf::from("unused-test-root")),
         engine: std::sync::Arc::new(Engine::new(
             Registry::new(),
             reqwest::Client::new(),
@@ -489,6 +491,87 @@ async fn a_cached_install_is_reported_through_the_routers_resolve() -> TinyBusRe
         runtime.version.ends_with("toolchain-1.0.0"),
         "the install directory did not reach the provider: {}",
         runtime.version
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn generic_persistent_worker_members_dispatch_real_jsonl_and_cleanup() -> TinyBusResult<()> {
+    use tinyruntime_bus::worker::{
+        WorkerCommand, WorkerHandle, WorkerOutcome, WorkerOutcomeKind, WorkerPlan, WorkerPrepare,
+        WorkerRequest, WorkerStatus,
+    };
+    let bus = bus();
+    let scratch = tempfile::tempdir().unwrap();
+    let module = Connection::connect(bus.connect().await?).await?;
+    setup(module, config_routing_node(scratch.path())).await?;
+    let client = Connection::connect(bus.connect().await?).await?;
+    let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    let handle: WorkerHandle = proxy.call(names::methods::WORKER_RESERVE, ()).await?;
+    let source = r#"printf '%s\n' '{"ready":true,"protocol":1,"backends":["alpha"]}'
+while IFS= read -r line; do
+ id=${line#*\"id\":\"}; id=${id%%\"*}
+ printf '{"id":"%s","ok":true,"result":{"answer":42}}\n' "$id"
+done
+"#;
+    let plan = WorkerPlan {
+        source: source.into(),
+        command: WorkerCommand {
+            executable: "/bin/sh".into(),
+            args: Vec::new(),
+            env: Vec::new(),
+        },
+        preparation: Vec::new(),
+        backends: vec!["alpha".into()],
+        startup_timeout_ms: 30_000,
+        request_timeout_ms: 60_000,
+        idle_backend: None,
+        idle_timeout_ms: 0,
+    };
+    let prepared: WorkerOutcome = proxy
+        .call(
+            names::methods::WORKER_PREPARE,
+            (WorkerPrepare {
+                handle: handle.clone(),
+                plan,
+            },),
+        )
+        .await?;
+    assert_eq!(prepared.kind, WorkerOutcomeKind::Complete);
+    let started: WorkerOutcome = proxy
+        .call(names::methods::WORKER_START, (handle.clone(),))
+        .await?;
+    assert_eq!(started.kind, WorkerOutcomeKind::Complete);
+    let status: WorkerStatus = proxy
+        .call(names::methods::WORKER_STATUS, (handle.clone(),))
+        .await?;
+    assert!(status.server.running);
+    assert!(status.server.backends[0].ready);
+    let response: WorkerOutcome = proxy
+        .call(
+            names::methods::WORKER_REQUEST,
+            (WorkerRequest {
+                handle: handle.clone(),
+                operation: 1,
+                method: "alpha.run".into(),
+                params: serde_json::json!({"input":"fixture"}),
+            },),
+        )
+        .await?;
+    assert_eq!(
+        response.response.unwrap().result,
+        Some(serde_json::json!({"answer":42}))
+    );
+    let stopped: WorkerOutcome = proxy.call(names::methods::WORKER_STOP, (handle,)).await?;
+    assert_eq!(stopped.kind, WorkerOutcomeKind::Complete);
+    let shutdown: WorkerOutcome = proxy.call(names::methods::WORKER_SHUTDOWN, ()).await?;
+    assert_eq!(shutdown.kind, WorkerOutcomeKind::Complete);
+    assert!(
+        proxy
+            .call::<WorkerHandle>(names::methods::WORKER_RESERVE, ())
+            .await
+            .is_err()
     );
     Ok(())
 }

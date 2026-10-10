@@ -25,6 +25,10 @@ license = "GPL-3.0-only"
 repository = "https://github.com/tinyhumansai/tinyruntime"
 
 [workspace.dependencies]
+# Catch a persistent supervisor fault while retaining native ownership for cleanup.
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+# Safe process-group/job-object ownership for persistent workers on Unix/Windows.
+command-group = { version = "5", features = ["with-tokio"] }
 # The wire contract. `crates/template` depends on it and re-exports it, so a
 # host that only makes calls takes this crate alone.
 # No `version` requirement on purpose: the workspace version moves on every

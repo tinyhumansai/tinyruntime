@@ -36,7 +36,7 @@ fn the_contract_is_re_exported_so_consumers_take_one_dependency() {
 #[test]
 fn the_bus_identity_is_available_without_naming_a_string() {
     assert_eq!(names::INTERFACE, tinyruntime::INTERFACE);
-    assert_eq!(names::METHODS.len(), 4);
+    assert_eq!(names::METHODS.len(), 11);
     assert!(names::PROVIDER_METHODS.contains(&names::provider_methods::DESCRIBE));
 }
 
