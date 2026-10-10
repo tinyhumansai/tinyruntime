@@ -24,12 +24,33 @@ fn legacy_worker_wire_defaults_and_status_are_preserved() {
 }
 
 #[test]
+fn command_deadlines_are_optional_and_legacy_commands_keep_their_wire_form() {
+    let legacy = serde_json::json!({
+        "executable":"/usr/bin/python",
+        "args":["-m", "venv"],
+        "env":[]
+    });
+    let command: WorkerCommand = serde_json::from_value(legacy.clone()).unwrap();
+    assert_eq!(command.timeout_ms, None);
+    assert_eq!(serde_json::to_value(command).unwrap(), legacy);
+
+    let bounded: WorkerCommand = serde_json::from_value(serde_json::json!({
+        "executable":"/usr/bin/python",
+        "args":[],
+        "env":[],
+        "timeout_ms":1_800_000
+    }))
+    .unwrap();
+    assert_eq!(bounded.timeout_ms, Some(1_800_000));
+}
+
+#[test]
 fn declarative_cache_recipe_keeps_exact_bytes_and_entry_kinds_on_wire() {
     let wire = serde_json::json!({"scope":"cache","artifacts":[{"path":"source","bytes":[0,255]}],"steps":[],"required":[{"path":"bin","kind":"directory"},{"path":"link","kind":"entry"}],"marker":{"path":"ready","bytes":[118,49]},"adoption":"strict","timeout_ms":1234});
     let recipe: CacheRecipe = serde_json::from_value(wire.clone()).unwrap();
     assert_eq!(recipe.artifacts[0].bytes, vec![0, 255]);
     assert_eq!(serde_json::to_value(recipe).unwrap(), wire);
-    assert_eq!(crate::CONTRACT_VERSION, (1, 2));
+    assert_eq!(crate::CONTRACT_VERSION, (1, 3));
     assert!(crate::version::provider_is_compatible((1, 0)));
     let legacy: CacheRecipe = serde_json::from_value(serde_json::json!({
         "scope":"cache","artifacts":[],"steps":[],"required":[],

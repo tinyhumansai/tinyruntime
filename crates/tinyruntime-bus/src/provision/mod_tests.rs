@@ -96,6 +96,30 @@ fn a_descriptor_reports_the_contract_it_was_built_against() {
 }
 
 #[test]
+fn an_old_provider_descriptor_keeps_its_wire_shape_and_defaults_capabilities() {
+    let legacy = serde_json::json!({
+        "language":"nodejs",
+        "display_name":"Node.js",
+        "default_version":"v22.11.0",
+        "contract_version":[1, 0],
+        "executables":["node"]
+    });
+    let descriptor: ProviderDescriptor = serde_json::from_value(legacy.clone()).unwrap();
+    assert!(descriptor.capabilities.is_empty());
+    assert!(crate::version::provider_is_compatible(
+        descriptor.contract_version
+    ));
+    assert_eq!(serde_json::to_value(descriptor).unwrap(), legacy);
+
+    let advertised = ProviderDescriptor::new(Language::python(), "Python", "3.12")
+        .with_capability(super::ProviderCapability::PrepareEnvironment);
+    assert_eq!(
+        serde_json::to_value(advertised).unwrap()["capabilities"],
+        serde_json::json!(["prepare_environment"])
+    );
+}
+
+#[test]
 fn the_distribution_wire_form_is_pinned() {
     let dist = Distribution::new(
         "1.2.3",

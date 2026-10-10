@@ -119,7 +119,9 @@ pub use names::{
 };
 pub use pool::{PoolSettings, PoolStats, PoolStatsResponse};
 pub use provision::{
-    ArchiveFormat, Distribution, LayoutRequest, LayoutResponse, ProviderDescriptor, RuntimeLayout,
+    ArchiveFormat, Distribution, EnvironmentPreparationPlan, EnvironmentPreparationRequest,
+    LayoutRequest, LayoutResponse, PackageGroup, ProviderCapability, ProviderDescriptor,
+    RuntimeLayout,
 };
 pub use resolve::{
     LanguageStatus, LanguagesResponse, ResolveRequest, ResolveResponse, ResolvedRuntime,

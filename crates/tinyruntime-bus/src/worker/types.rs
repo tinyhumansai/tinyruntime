@@ -16,6 +16,11 @@ pub struct WorkerCommand {
     pub args: Vec<String>,
     /// Extra environment over the router's safe allowlist.
     pub env: Vec<(String, String)>,
+    /// Optional deadline for a preparation command, bounded by the enclosing
+    /// operation. `None` preserves the enclosing operation's deadline. The
+    /// long-lived command in [`WorkerPlan`] uses its startup timeout instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
 }
 
 /// A bounded installation/launch description without language algorithms.

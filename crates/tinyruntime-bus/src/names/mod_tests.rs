@@ -1,8 +1,9 @@
 //! Unit tests for the bus identity constants.
 
 use super::{
-    INTERFACE, METHODS, OBJECT_PATH, PROVIDER_INTERFACE, PROVIDER_METHODS, methods,
-    object_path_for, provider_methods, providers,
+    INTERFACE, METHODS, OBJECT_PATH, OPTIONAL_PROVIDER_METHODS, PROVIDER_INTERFACE,
+    PROVIDER_METHODS, methods, object_path_for, optional_provider_methods, provider_methods,
+    providers,
 };
 
 #[test]
@@ -76,6 +77,15 @@ fn every_provider_member_is_listed_once() {
     sorted.sort_unstable();
     sorted.dedup();
     assert_eq!(sorted.len(), PROVIDER_METHODS.len());
+    assert_eq!(
+        OPTIONAL_PROVIDER_METHODS,
+        [optional_provider_methods::PREPARE_ENVIRONMENT]
+    );
+    assert!(
+        PROVIDER_METHODS
+            .iter()
+            .all(|method| !OPTIONAL_PROVIDER_METHODS.contains(method))
+    );
 }
 
 #[test]

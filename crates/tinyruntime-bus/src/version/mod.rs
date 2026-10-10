@@ -14,7 +14,7 @@
 //! unavailable.
 
 /// The wire contract version this crate defines.
-pub const CONTRACT_VERSION: (u32, u32) = (1, 2);
+pub const CONTRACT_VERSION: (u32, u32) = (1, 3);
 
 /// Returns whether a peer holding [`CONTRACT_VERSION`] can bind to one
 /// reporting `other`.

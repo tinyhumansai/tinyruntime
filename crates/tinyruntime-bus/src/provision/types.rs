@@ -176,6 +176,12 @@ pub struct ProviderDescriptor {
     pub contract_version: (u32, u32),
     /// The logical executable names this provider's layouts can carry.
     pub executables: Vec<String>,
+    /// Optional language capabilities implemented by this provider.
+    ///
+    /// Omitted from the wire when empty, preserving the descriptor shape used
+    /// by providers that predate optional capabilities.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capabilities: Vec<ProviderCapability>,
 }
 
 impl ProviderDescriptor {
@@ -192,6 +198,7 @@ impl ProviderDescriptor {
             default_version: default_version.into(),
             contract_version: crate::CONTRACT_VERSION,
             executables: Vec::new(),
+            capabilities: Vec::new(),
         }
     }
 
@@ -201,6 +208,101 @@ impl ProviderDescriptor {
         self.executables.push(name.into());
         self
     }
+
+    /// Declares an optional provider operation this module implements.
+    #[must_use]
+    pub fn with_capability(mut self, capability: ProviderCapability) -> Self {
+        if !self.capabilities.contains(&capability) {
+            self.capabilities.push(capability);
+        }
+        self
+    }
+}
+
+/// An optional operation a provider can describe in addition to the base
+/// provider interface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum ProviderCapability {
+    /// Describe how to create a language environment and install named packages.
+    PrepareEnvironment,
+}
+
+/// Host-selected inputs for a provider's declarative environment recipe.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EnvironmentPreparationRequest {
+    /// Absolute runtime executable reported by this provider's layout.
+    pub runtime_executable: String,
+    /// Host-approved absolute directory for the prepared environment.
+    pub environment_root: String,
+    /// Whether the provider should describe an installer self-upgrade step.
+    pub upgrade_installer: bool,
+    /// Ordered package groups selected by the recipe owner.
+    pub package_groups: Vec<PackageGroup>,
+}
+
+impl EnvironmentPreparationRequest {
+    /// Builds a request from the resolved runtime and host-approved directory.
+    #[must_use]
+    pub fn new(runtime_executable: impl Into<String>, environment_root: impl Into<String>) -> Self {
+        Self {
+            runtime_executable: runtime_executable.into(),
+            environment_root: environment_root.into(),
+            upgrade_installer: false,
+            package_groups: Vec::new(),
+        }
+    }
+
+    /// Requests an installer self-upgrade before package groups.
+    #[must_use]
+    pub fn with_installer_upgrade(mut self) -> Self {
+        self.upgrade_installer = true;
+        self
+    }
+
+    /// Adds a package group in provider installation order.
+    #[must_use]
+    pub fn with_package_group(mut self, group: PackageGroup) -> Self {
+        self.package_groups.push(group);
+        self
+    }
+}
+
+/// An ordered group of named requirements and an optional source hint.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PackageGroup {
+    /// Names selected by the recipe owner, passed as individual arguments.
+    pub packages: Vec<String>,
+    /// Optional source hint interpreted by the provider's installer.
+    pub source: Option<String>,
+}
+
+impl PackageGroup {
+    /// Builds a group with no source override.
+    #[must_use]
+    pub fn new(packages: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        Self {
+            packages: packages.into_iter().map(Into::into).collect(),
+            source: None,
+        }
+    }
+
+    /// Sets the source hint for these packages.
+    #[must_use]
+    pub fn with_source(mut self, source: impl Into<String>) -> Self {
+        self.source = Some(source.into());
+        self
+    }
+}
+
+/// Provider-authored native commands and executable path for one environment.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EnvironmentPreparationPlan {
+    /// Absolute executable inside the prepared environment.
+    pub executable: String,
+    /// Ordered native commands that create and populate the environment.
+    pub steps: Vec<crate::worker::WorkerCommand>,
 }
 
 /// Ask a provider where the executables are inside an extracted install.

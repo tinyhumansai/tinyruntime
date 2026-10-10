@@ -10,7 +10,9 @@
 mod types;
 
 pub use types::{
-    ArchiveFormat, Distribution, LayoutRequest, LayoutResponse, ProviderDescriptor, RuntimeLayout,
+    ArchiveFormat, Distribution, EnvironmentPreparationPlan, EnvironmentPreparationRequest,
+    LayoutRequest, LayoutResponse, PackageGroup, ProviderCapability, ProviderDescriptor,
+    RuntimeLayout,
 };
 
 #[cfg(test)]
