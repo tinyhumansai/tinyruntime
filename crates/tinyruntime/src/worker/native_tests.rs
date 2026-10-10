@@ -21,6 +21,64 @@ async fn preserves_newline_frames_and_rejects_truncated_eof() {
     assert_eq!(line(&mut reader).await.unwrap_err(), "worker_closed");
 }
 
+#[test]
+fn a_step_deadline_is_bounded_by_the_enclosing_operation_deadline() {
+    let command = WorkerCommand {
+        executable: "/bin/sh".into(),
+        args: Vec::new(),
+        env: Vec::new(),
+        timeout_ms: Some(20),
+    };
+    let whole = Instant::now() + std::time::Duration::from_secs(10);
+    let step = command_deadline(&command, whole);
+    assert!(step < whole);
+    assert_eq!(command_deadline(&command, step), step);
+    let longer_step = WorkerCommand {
+        timeout_ms: Some(20_000),
+        ..command.clone()
+    };
+    assert_eq!(command_deadline(&longer_step, whole), whole);
+    let no_step_limit = WorkerCommand {
+        timeout_ms: None,
+        ..command
+    };
+    assert_eq!(command_deadline(&no_step_limit, whole), whole);
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test(start_paused = true)]
+async fn a_step_timeout_kills_and_joins_its_native_process_group() {
+    let root = tempfile::tempdir().unwrap();
+    let command = WorkerCommand {
+        executable: "/bin/sh".into(),
+        args: vec!["-c".into(), "exec sleep 600".into()],
+        env: Vec::new(),
+        timeout_ms: Some(30),
+    };
+    let mut preparation = Preparation::spawn(&command, root.path()).unwrap();
+    let pid = preparation.child.as_ref().unwrap().id().unwrap();
+    let (_stop, mut stop) = watch::channel(false);
+    let deadline = command_deadline(
+        &command,
+        Instant::now() + std::time::Duration::from_secs(50),
+    );
+    let result = {
+        let execute = preparation.execute(&mut stop, deadline);
+        tokio::pin!(execute);
+        assert!(
+            std::future::poll_fn(|cx| {
+                std::task::Poll::Ready(execute.as_mut().poll(cx).is_pending())
+            })
+            .await
+        );
+        tokio::time::advance(std::time::Duration::from_millis(31)).await;
+        execute.await
+    };
+    assert_eq!(result, Err("prepare_timeout"));
+    preparation.cleanup().await.unwrap();
+    assert!(!std::path::Path::new(&format!("/proc/{pid}")).exists());
+}
+
 #[cfg(target_os = "linux")]
 async fn await_reaped(pid: u32) {
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
@@ -47,6 +105,7 @@ async fn dropping_native_ownership_signals_and_awaits_reaping_on_the_live_runtim
         executable: "/bin/sh".into(),
         args: Vec::new(),
         env: Vec::new(),
+        timeout_ms: None,
     };
     let mut process = Process::spawn(&command, root.path(), &script).unwrap();
     let pid = process.child.as_ref().unwrap().id().unwrap();
@@ -57,6 +116,7 @@ async fn dropping_native_ownership_signals_and_awaits_reaping_on_the_live_runtim
         executable: "/bin/sh".into(),
         args: vec!["-c".into(), "exec sleep 600".into()],
         env: Vec::new(),
+        timeout_ms: None,
     };
     let preparation = Preparation::spawn(&command, root.path()).unwrap();
     let pid = preparation.child.as_ref().unwrap().id().unwrap();
@@ -86,6 +146,7 @@ async fn canceled_cleanup_wait_retains_reaping_until_a_later_cleanup_finishes() 
         executable: "/bin/sh".into(),
         args: Vec::new(),
         env: Vec::new(),
+        timeout_ms: None,
     };
     let mut process = Process::spawn(&command, root.path(), &script).unwrap();
     let pid = process.child.as_ref().unwrap().id().unwrap();
@@ -133,6 +194,7 @@ async fn canceled_preparation_cleanup_keeps_the_original_group_wait_owned() {
         executable: "/bin/sh".into(),
         args: vec!["-c".into(), "exec sleep 600".into()],
         env: Vec::new(),
+        timeout_ms: None,
     };
     let mut process = Preparation::spawn(&command, root.path()).unwrap();
     let pid = process.child.as_ref().unwrap().id().unwrap();

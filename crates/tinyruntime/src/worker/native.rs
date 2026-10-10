@@ -19,6 +19,13 @@ use tinyruntime_bus::worker::{
 pub(super) const MAX_LINE: usize = 256 * 1024;
 pub(super) const MAX_OPERATION_BYTES: usize = 1024 * 1024;
 
+/// Bound a command to its own optional deadline and the enclosing operation.
+pub(super) fn command_deadline(plan: &WorkerCommand, enclosing: Instant) -> Instant {
+    plan.timeout_ms.map_or(enclosing, |timeout| {
+        enclosing.min(Instant::now() + std::time::Duration::from_millis(timeout))
+    })
+}
+
 /// A frame reader that rejects expansion before extending its owned buffer.
 async fn line<R: AsyncBufRead + Unpin>(reader: &mut R) -> Result<Vec<u8>, &'static str> {
     let mut bytes = Vec::new();

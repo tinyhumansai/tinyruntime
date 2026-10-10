@@ -102,7 +102,7 @@ pub(super) fn recipe(recipe: &CacheRecipe) -> Result<(), &'static str> {
         || recipe.required.len() > 32
         || recipe.steps.len() > 16
         || recipe.timeout_ms == 0
-        || recipe.timeout_ms > 30 * 60 * 1000
+        || recipe.timeout_ms > 4 * 60 * 60 * 1000
     {
         return Err("cache_recipe_limit");
     }

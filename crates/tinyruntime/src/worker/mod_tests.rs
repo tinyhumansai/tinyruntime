@@ -29,6 +29,7 @@ pub(super) fn plan(source: &str) -> WorkerPlan {
             executable: "/bin/sh".into(),
             args: Vec::new(),
             env: Vec::new(),
+            timeout_ms: None,
         },
         preparation: Vec::new(),
         backends: vec!["alpha".into()],
@@ -231,6 +232,7 @@ async fn canceled_prepare_waiter_and_shutdown_wait_for_preparation_native_cleanu
             executable: "/bin/sh".into(),
             args: vec!["-c".into(), "echo $$ > \"$MARK\"; exec sleep 600".into()],
             env: vec![("MARK".into(), mark.display().to_string())],
+            timeout_ms: None,
         });
     let task_manager = manager.clone();
     let waiter = tokio::spawn(async move {
@@ -529,6 +531,7 @@ async fn explicit_preparation_steps_drain_both_pipes_and_fail_bounded_overflow()
                 executable: "/bin/sh".into(),
                 args: vec!["-c".into(), script.into()],
                 env: Vec::new(),
+                timeout_ms: None,
             });
         assert_eq!(
             manager

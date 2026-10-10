@@ -88,12 +88,12 @@ fn valid() -> CacheRecipe {
 fn recipe_bounds_are_checked_before_native_or_filesystem_expansion() {
     let initial = valid();
     assert!(recipe(&initial).is_ok());
-    for mutation in 0..9 {
+    for mutation in 0..10 {
         let mut value = initial.clone();
         match mutation {
             0 => value.scope.clear(),
             1 => value.timeout_ms = 0,
-            2 => value.timeout_ms = 30 * 60 * 1000 + 1,
+            2 => value.timeout_ms = 4 * 60 * 60 * 1000 + 1,
             3 => value.marker.path = "../ready".into(),
             4 => value.marker.bytes = vec![0; MAX_FILE + 1],
             5 => value.artifacts = vec![value.marker.clone()],
@@ -108,6 +108,15 @@ fn recipe_bounds_are_checked_before_native_or_filesystem_expansion() {
                     executable: "implicit".into(),
                     args: Vec::new(),
                     env: Vec::new(),
+                    timeout_ms: None,
+                }];
+            }
+            8 => {
+                value.steps = vec![tinyruntime_bus::worker::WorkerCommand {
+                    executable: "/runtime".into(),
+                    args: Vec::new(),
+                    env: Vec::new(),
+                    timeout_ms: Some(30 * 60 * 1000 + 1),
                 }];
             }
             _ => {
@@ -130,4 +139,11 @@ fn recipe_bounds_are_checked_before_native_or_filesystem_expansion() {
         .collect();
     value.marker.bytes = vec![1];
     assert!(recipe(&value).is_err());
+}
+
+#[test]
+fn the_whole_deadline_can_cover_every_legacy_provisioning_step() {
+    let mut value = valid();
+    value.timeout_ms = 7_320_000;
+    assert!(recipe(&value).is_ok());
 }

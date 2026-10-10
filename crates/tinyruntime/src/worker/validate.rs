@@ -13,6 +13,12 @@ pub(super) fn command(command: &WorkerCommand) -> Result<(), &'static str> {
     {
         return Err("command_limit");
     }
+    if command
+        .timeout_ms
+        .is_some_and(|timeout| timeout == 0 || timeout > 30 * 60 * 1000)
+    {
+        return Err("command_limit");
+    }
     let bytes = command.args.iter().map(String::len).sum::<usize>()
         + command
             .env
@@ -42,6 +48,7 @@ pub(super) fn plan(plan: &WorkerPlan) -> Result<(), &'static str> {
         || plan.request_timeout_ms > 60 * 1000
         || plan.idle_timeout_ms > 24 * 60 * 60 * 1000
         || plan.idle_backend.as_ref().is_some_and(|s| s.len() > 128)
+        || plan.command.timeout_ms.is_some()
     {
         return Err("plan_limit");
     }

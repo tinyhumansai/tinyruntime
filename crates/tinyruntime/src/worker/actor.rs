@@ -172,7 +172,8 @@ impl Actor {
                 .check_binding()?;
             self.preparation = Some(Preparation::spawn(step, &cached.root)?);
             let preparation = self.preparation.as_mut().ok_or("prepare_closed")?;
-            let result = preparation.execute(&mut self.stop, deadline).await;
+            let step_deadline = native::command_deadline(step, deadline);
+            let result = preparation.execute(&mut self.stop, step_deadline).await;
             preparation.cleanup().await?;
             self.preparation = None;
             result?;
@@ -209,7 +210,8 @@ impl Actor {
             let Some(preparation) = self.preparation.as_mut() else {
                 return outcome(WorkerOutcomeKind::Failed, Some("prepare_closed"));
             };
-            let result = preparation.execute(&mut self.stop, deadline).await;
+            let step_deadline = native::command_deadline(step, deadline);
+            let result = preparation.execute(&mut self.stop, step_deadline).await;
             if preparation.cleanup().await.is_err() {
                 return outcome(WorkerOutcomeKind::Failed, Some("cleanup_failed"));
             }

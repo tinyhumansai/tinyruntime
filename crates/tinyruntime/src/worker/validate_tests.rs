@@ -7,6 +7,7 @@ fn invalid_command_vectors_and_plan_limits_are_rejected() {
         executable: "/explicit-runtime".into(),
         args: vec!["x".repeat(65537)],
         env: Vec::new(),
+        timeout_ms: None,
     };
     assert_eq!(super::command(&command), Err("command_limit"));
     command.args.clear();
@@ -32,11 +33,30 @@ fn invalid_command_vectors_and_plan_limits_are_rejected() {
         executable: String::new(),
         args: Vec::new(),
         env: Vec::new(),
+        timeout_ms: None,
     });
     assert_eq!(super::plan(&plan), Err("command_limit"));
     plan.preparation.clear();
+    plan.command.timeout_ms = Some(1);
+    assert_eq!(super::plan(&plan), Err("plan_limit"));
+    plan.command.timeout_ms = None;
     plan.idle_backend = Some("x".repeat(129));
     assert_eq!(super::plan(&plan), Err("plan_limit"));
     let mut count = Count(0);
     assert!(std::io::Write::flush(&mut count).is_ok());
+}
+
+#[test]
+fn step_deadlines_are_bounded_independently() {
+    let mut command = WorkerCommand {
+        executable: "/explicit-runtime".into(),
+        args: Vec::new(),
+        env: Vec::new(),
+        timeout_ms: Some(1),
+    };
+    assert_eq!(super::command(&command), Ok(()));
+    command.timeout_ms = Some(0);
+    assert_eq!(super::command(&command), Err("command_limit"));
+    command.timeout_ms = Some(30 * 60 * 1000 + 1);
+    assert_eq!(super::command(&command), Err("command_limit"));
 }
