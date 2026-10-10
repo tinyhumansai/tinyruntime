@@ -11,7 +11,7 @@
 
 use std::sync::Arc;
 
-use tinyruntime_bus::{Language, LanguageStatus};
+use tinyruntime_bus::{EnvironmentPreparationPlan, Language, LanguageStatus};
 
 use super::{Provider, Route};
 use crate::error::{Error, Result};
@@ -70,6 +70,31 @@ impl Registry {
             .find(|route| &route.language == language)
             .map(|route| Arc::clone(&route.provider))
             .ok_or_else(|| Error::UnknownLanguage(language.clone()))
+    }
+
+    /// Ask the provider routed for `language` for its optional environment plan.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::LanguageMissing`] or [`Error::UnknownLanguage`] when no
+    /// route matches, or the provider error when an advertised operation fails.
+    pub async fn prepare_environment(
+        &self,
+        language: &Language,
+        request: &tinyruntime_bus::EnvironmentPreparationRequest,
+    ) -> Result<Option<EnvironmentPreparationPlan>> {
+        let route = self
+            .routes
+            .iter()
+            .find(|route| &route.language == language)
+            .ok_or_else(|| {
+                if language.is_empty() {
+                    Error::LanguageMissing
+                } else {
+                    Error::UnknownLanguage(language.clone())
+                }
+            })?;
+        route.prepare_environment(request).await
     }
 
     /// Every registered language, in registration order.

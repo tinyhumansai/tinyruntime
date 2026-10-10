@@ -31,6 +31,8 @@ pub struct ModuleConfig {
     /// Where worker harnesses are written, or empty for a directory under the
     /// platform cache.
     pub harness_dir: String,
+    /// Explicit named persistent cache scopes; empty denies all cache recipes.
+    pub worker_cache_scopes: Vec<tinyruntime_bus::worker::WorkerCacheScope>,
 }
 
 /// The fields as they appear on the wire.
@@ -45,6 +47,7 @@ pub struct ModuleConfig {
 struct Wire {
     providers: Vec<ProviderRoute>,
     harness_dir: String,
+    worker_cache_scopes: Vec<tinyruntime_bus::worker::WorkerCacheScope>,
 }
 
 impl Default for Wire {
@@ -53,6 +56,7 @@ impl Default for Wire {
         Self {
             providers: default.providers,
             harness_dir: default.harness_dir,
+            worker_cache_scopes: default.worker_cache_scopes,
         }
     }
 }
@@ -68,6 +72,7 @@ impl<'de> Deserialize<'de> for ModuleConfig {
             Some(wire) => Ok(Self {
                 providers: wire.providers,
                 harness_dir: wire.harness_dir,
+                worker_cache_scopes: wire.worker_cache_scopes,
             }),
             None => Ok(Self::default()),
         }
@@ -103,6 +108,7 @@ impl Default for ModuleConfig {
                 ProviderRoute::new(Language::python(), names::providers::PYTHON),
             ],
             harness_dir: String::new(),
+            worker_cache_scopes: Vec::new(),
         }
     }
 }

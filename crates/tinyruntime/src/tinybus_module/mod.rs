@@ -25,8 +25,8 @@ use std::sync::Arc;
 use tinybus::{Connection, Result as TinyBusResult};
 
 use tinyruntime_bus::{
-    ExecRequest, ExecResponse, LanguagesResponse, PoolStatsResponse, ResolveRequest,
-    ResolveResponse, names,
+    ExecRequest, ExecResponse, LanguagesResponse, PoolStatsResponse, PrepareEnvironmentRequest,
+    ResolveRequest, ResolveResponse, names,
 };
 
 use crate::config::ModuleConfig;
@@ -37,6 +37,7 @@ use crate::provider::{BusProvider, Registry};
 /// The object this module serves.
 struct RuntimeService {
     engine: Arc<Engine>,
+    workers: crate::worker::WorkerManager,
 }
 
 #[tinybus::interface(name = "ai.tinyhumans.runtime.Runtime")]
@@ -69,6 +70,80 @@ impl RuntimeService {
     async fn pool_stats(&self) -> TinyBusResult<PoolStatsResponse> {
         Ok(PoolStatsResponse::new(self.engine.pool_stats().await))
     }
+
+    /// Ask the configured language provider to describe an optional environment recipe.
+    async fn prepare_environment(
+        &self,
+        request: PrepareEnvironmentRequest,
+    ) -> TinyBusResult<Option<tinyruntime_bus::EnvironmentPreparationPlan>> {
+        self.engine
+            .prepare_environment(&request.language, &request.preparation)
+            .await
+            .map_err(|error| failed(&error))
+    }
+    /// Reserve a known handle before worker side effects.
+    async fn worker_reserve(&self) -> TinyBusResult<tinyruntime_bus::worker::WorkerHandle> {
+        self.workers
+            .reserve()
+            .await
+            .map_err(|_| tinybus::Error::failed("worker_reservation_unavailable"))
+    }
+
+    /// Install an immutable trusted plan under its known reservation.
+    async fn worker_prepare(
+        &self,
+        request: tinyruntime_bus::worker::WorkerPrepare,
+    ) -> TinyBusResult<tinyruntime_bus::worker::WorkerOutcome> {
+        Ok(self.workers.prepare(request).await)
+    }
+
+    /// Provision a host-approved persistent cache then prepare a known worker.
+    async fn worker_prepare_cached(
+        &self,
+        request: tinyruntime_bus::worker::WorkerPrepareCached,
+    ) -> TinyBusResult<tinyruntime_bus::worker::WorkerOutcome> {
+        Ok(self.workers.prepare_cached(request).await)
+    }
+
+    /// Start only the known prepared resource.
+    async fn worker_start(
+        &self,
+        handle: tinyruntime_bus::worker::WorkerHandle,
+    ) -> TinyBusResult<tinyruntime_bus::worker::WorkerOutcome> {
+        Ok(self.workers.start(&handle).await)
+    }
+
+    /// Send one caller-known JSONL operation.
+    async fn worker_request(
+        &self,
+        request: tinyruntime_bus::worker::WorkerRequest,
+    ) -> TinyBusResult<tinyruntime_bus::worker::WorkerOutcome> {
+        Ok(self.workers.request(request).await)
+    }
+
+    /// Read lifecycle and preserved backend status without spawning.
+    async fn worker_status(
+        &self,
+        handle: tinyruntime_bus::worker::WorkerHandle,
+    ) -> TinyBusResult<tinyruntime_bus::worker::WorkerStatus> {
+        self.workers
+            .status(&handle)
+            .await
+            .map_err(|_| tinybus::Error::failed("worker_handle_closed"))
+    }
+
+    /// Cancel and reap native ownership before acknowledgement.
+    async fn worker_stop(
+        &self,
+        handle: tinyruntime_bus::worker::WorkerHandle,
+    ) -> TinyBusResult<tinyruntime_bus::worker::WorkerOutcome> {
+        Ok(self.workers.stop(&handle).await)
+    }
+
+    /// Terminal barrier required before ABI unload.
+    async fn worker_shutdown(&self) -> TinyBusResult<tinyruntime_bus::worker::WorkerOutcome> {
+        Ok(self.workers.shutdown().await)
+    }
 }
 
 /// Render a router failure as a bus error.
@@ -98,6 +173,10 @@ async fn setup(connection: Connection, config: ModuleConfig) -> TinyBusResult<()
         "[tinyruntime] routing table built"
     );
 
+    let workers =
+        crate::worker::WorkerManager::new(config.harness_root().join("persistent-workers"))
+            .with_cache_scopes(config.worker_cache_scopes.clone())
+            .map_err(|_| tinybus::Error::failed("cache_scope_configuration_invalid"))?;
     let engine = Arc::new(Engine::new(
         registry,
         reqwest::Client::new(),
@@ -105,7 +184,10 @@ async fn setup(connection: Connection, config: ModuleConfig) -> TinyBusResult<()
     ));
 
     connection
-        .serve_at(names::OBJECT_PATH.try_into()?, RuntimeService { engine })
+        .serve_at(
+            names::OBJECT_PATH.try_into()?,
+            RuntimeService { engine, workers },
+        )
         .await?;
     connection.request_name(names::INTERFACE).await?;
     Ok(())
@@ -121,7 +203,7 @@ pub(crate) mod exports {
         config = ModuleConfig,
         worker_threads = 2,
         provides = ["ai.tinyhumans.runtime.Runtime"],
-        methods = ["Languages", "Resolve", "Execute", "PoolStats"],
+        methods = ["Languages", "Resolve", "Execute", "PoolStats", "PrepareEnvironment", "WorkerReserve", "WorkerPrepare", "WorkerPrepareCached", "WorkerStart", "WorkerRequest", "WorkerStatus", "WorkerStop", "WorkerShutdown"],
         signals = [],
         requires = [],
         optional = ["ai.tinyhumans.runtime.Provider"],

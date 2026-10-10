@@ -16,6 +16,9 @@ use tinyruntime_bus::Language;
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
+    /// Host cache scope configuration is invalid; reason is content-free.
+    #[error("cache scope configuration invalid: {0}")]
+    CacheScope(&'static str),
     /// No provider is registered for the requested language.
     #[error("no runtime provider is registered for `{0}`")]
     UnknownLanguage(Language),

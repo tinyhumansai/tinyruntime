@@ -12,27 +12,31 @@ use tinybus::broker::Broker;
 use tinybus::transport::memory::MemoryBus;
 use tinybus::{Connection, Result as TinyBusResult};
 
+use tinyruntime_bus::worker::WorkerCommand;
 use tinyruntime_bus::{
-    ArchiveFormat, Distribution, Language, LayoutRequest, LayoutResponse, ProviderDescriptor,
+    ArchiveFormat, Distribution, EnvironmentPreparationPlan, EnvironmentPreparationRequest,
+    Language, LayoutRequest, LayoutResponse, PackageGroup, ProviderCapability, ProviderDescriptor,
     RuntimeLayout, RuntimeSettings, WorkerHarness, names,
 };
 
 use super::{BusProvider, Provider};
+use crate::Route;
 use crate::error::Error;
 
 /// A peer answering all five provider members.
-struct Served;
+struct Served {
+    preparation_capability: bool,
+}
 
 #[tinybus::interface(name = "ai.tinyhumans.runtime.Provider")]
 impl Served {
     async fn describe(&self) -> TinyBusResult<ProviderDescriptor> {
-        std::future::ready(Ok(ProviderDescriptor::new(
-            Language::nodejs(),
-            "Served",
-            "1.0.0",
-        )
-        .with_executable("tool")))
-        .await
+        let mut descriptor =
+            ProviderDescriptor::new(Language::nodejs(), "Served", "1.0.0").with_executable("tool");
+        if self.preparation_capability {
+            descriptor = descriptor.with_capability(ProviderCapability::PrepareEnvironment);
+        }
+        std::future::ready(Ok(descriptor)).await
     }
 
     async fn detect_system(&self, _settings: RuntimeSettings) -> TinyBusResult<LayoutResponse> {
@@ -65,26 +69,59 @@ impl Served {
     async fn harness(&self) -> TinyBusResult<WorkerHarness> {
         std::future::ready(Ok(WorkerHarness::new("worker.js", "// body", "tool"))).await
     }
+
+    async fn prepare_environment(
+        &self,
+        request: EnvironmentPreparationRequest,
+    ) -> TinyBusResult<EnvironmentPreparationPlan> {
+        std::future::ready(Ok(EnvironmentPreparationPlan {
+            executable: format!("{}/bin/python", request.environment_root),
+            steps: vec![WorkerCommand {
+                executable: request.runtime_executable,
+                args: request
+                    .package_groups
+                    .iter()
+                    .flat_map(|group| group.packages.iter().cloned())
+                    .collect(),
+                env: request
+                    .package_groups
+                    .first()
+                    .and_then(|group| group.source.clone())
+                    .map(|source| vec![("SOURCE_HINT".into(), source)])
+                    .unwrap_or_default(),
+                timeout_ms: Some(1_800_000),
+            }],
+        }))
+        .await
+    }
 }
 
 /// The bus name the served peer claims in these tests.
 const BUS_NAME: &str = names::providers::NODEJS;
 
 /// Start a broker, serve the provider, and return a routed client for it.
-async fn routed() -> TinyBusResult<(Connection, BusProvider)> {
+async fn routed_with_capability(
+    preparation_capability: bool,
+) -> TinyBusResult<(Connection, BusProvider)> {
     let bus = MemoryBus::new();
     Broker::new().spawn(bus.clone());
 
     let peer = Connection::connect(bus.connect().await?).await?;
     peer.serve_at(
         names::object_path_for(BUS_NAME).as_str().try_into()?,
-        Served,
+        Served {
+            preparation_capability,
+        },
     )
     .await?;
     peer.request_name(BUS_NAME).await?;
 
     let client = Connection::connect(bus.connect().await?).await?;
     Ok((peer, BusProvider::new(client, Language::nodejs(), BUS_NAME)))
+}
+
+async fn routed() -> TinyBusResult<(Connection, BusProvider)> {
+    routed_with_capability(false).await
 }
 
 /// A client routed at a name nobody owns.
@@ -131,6 +168,52 @@ async fn every_member_reaches_the_provider() -> TinyBusResult<()> {
 
     let harness = provider.harness().await.expect("harness routes");
     assert_eq!(harness.filename, "worker.js");
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_old_five_member_provider_skips_the_unadvertised_optional_operation() -> TinyBusResult<()>
+{
+    let (_peer, provider) = routed().await?;
+    let route = Route {
+        language: Language::nodejs(),
+        bus_name: BUS_NAME.into(),
+        provider: Arc::new(provider),
+    };
+    let result = route
+        .prepare_environment(&EnvironmentPreparationRequest::new(
+            "/runtime/python",
+            "/approved/environment",
+        ))
+        .await
+        .expect("the five-member provider remains usable");
+    assert!(result.is_none());
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_advertised_provider_returns_its_environment_commands() -> TinyBusResult<()> {
+    let (_peer, provider) = routed_with_capability(true).await?;
+    let route = Route {
+        language: Language::nodejs(),
+        bus_name: names::providers::PYTHON.into(),
+        provider: Arc::new(provider),
+    };
+    let request = EnvironmentPreparationRequest::new("/runtime/python", "/approved/environment")
+        .with_installer_upgrade()
+        .with_package_group(
+            PackageGroup::new(["torch"]).with_source("https://packages.invalid/cpu"),
+        );
+    let plan = route
+        .prepare_environment(&request)
+        .await
+        .expect("the advertised operation reaches its provider")
+        .expect("the capability was advertised");
+    assert_eq!(plan.executable, "/approved/environment/bin/python");
+    assert_eq!(plan.steps[0].executable, "/runtime/python");
+    assert_eq!(plan.steps[0].args, ["torch"]);
+    assert_eq!(plan.steps[0].env[0].1, "https://packages.invalid/cpu");
+    assert_eq!(plan.steps[0].timeout_ms, Some(1_800_000));
     Ok(())
 }
 
@@ -193,7 +276,9 @@ async fn a_provider_is_addressed_at_the_path_derived_from_its_bus_name() -> Tiny
         names::object_path_for(names::PROVIDER_INTERFACE)
             .as_str()
             .try_into()?,
-        Served,
+        Served {
+            preparation_capability: false,
+        },
     )
     .await?;
     peer.request_name(BUS_NAME).await?;

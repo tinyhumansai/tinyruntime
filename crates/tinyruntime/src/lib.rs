@@ -115,3 +115,6 @@ pub use tinyruntime_bus::{
     RuntimeSettings, RuntimeSource, WORKER_PROTOCOL_VERSION, WorkerHarness, is_compatible, names,
     object_path_for,
 };
+
+/// Module-owned persistent JSONL workers.
+pub mod worker;

@@ -14,7 +14,7 @@
 //! unavailable.
 
 /// The wire contract version this crate defines.
-pub const CONTRACT_VERSION: (u32, u32) = (1, 0);
+pub const CONTRACT_VERSION: (u32, u32) = (1, 4);
 
 /// Returns whether a peer holding [`CONTRACT_VERSION`] can bind to one
 /// reporting `other`.
@@ -52,3 +52,12 @@ fn binds(local: (u32, u32), other: (u32, u32)) -> bool {
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod test;
+
+/// Required revision of unchanged provider members, independent of router additions.
+pub const PROVIDER_CONTRACT_VERSION: (u32, u32) = (1, 0);
+
+/// Whether a provider supports the existing provider vocabulary.
+#[must_use]
+pub fn provider_is_compatible(other: (u32, u32)) -> bool {
+    binds(PROVIDER_CONTRACT_VERSION, other)
+}

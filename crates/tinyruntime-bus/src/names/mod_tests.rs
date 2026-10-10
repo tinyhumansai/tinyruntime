@@ -1,8 +1,9 @@
 //! Unit tests for the bus identity constants.
 
 use super::{
-    INTERFACE, METHODS, OBJECT_PATH, PROVIDER_INTERFACE, PROVIDER_METHODS, methods,
-    object_path_for, provider_methods, providers,
+    INTERFACE, METHODS, OBJECT_PATH, OPTIONAL_PROVIDER_METHODS, PROVIDER_INTERFACE,
+    PROVIDER_METHODS, methods, object_path_for, optional_provider_methods, provider_methods,
+    providers,
 };
 
 #[test]
@@ -43,7 +44,16 @@ fn every_router_member_is_listed_once() {
             methods::LANGUAGES,
             methods::RESOLVE,
             methods::EXECUTE,
-            methods::POOL_STATS
+            methods::POOL_STATS,
+            methods::PREPARE_ENVIRONMENT,
+            methods::WORKER_RESERVE,
+            methods::WORKER_PREPARE,
+            methods::WORKER_PREPARE_CACHED,
+            methods::WORKER_START,
+            methods::WORKER_REQUEST,
+            methods::WORKER_STATUS,
+            methods::WORKER_STOP,
+            methods::WORKER_SHUTDOWN,
         ]
     );
     let mut sorted = METHODS.to_vec();
@@ -68,6 +78,15 @@ fn every_provider_member_is_listed_once() {
     sorted.sort_unstable();
     sorted.dedup();
     assert_eq!(sorted.len(), PROVIDER_METHODS.len());
+    assert_eq!(
+        OPTIONAL_PROVIDER_METHODS,
+        [optional_provider_methods::PREPARE_ENVIRONMENT]
+    );
+    assert!(
+        PROVIDER_METHODS
+            .iter()
+            .all(|method| !OPTIONAL_PROVIDER_METHODS.contains(method))
+    );
 }
 
 #[test]

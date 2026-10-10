@@ -1,8 +1,9 @@
 //! What a language provider can be asked, and how the router finds one.
 //!
-//! [`Provider`] is the whole language-specific surface of this system: five
-//! questions, none of which touch the network for bytes, unpack anything, or
-//! spawn a worker. A provider that answers them correctly gets the router's
+//! [`Provider`] is the language-specific surface of this system: five required
+//! questions and optional advertised descriptions, none of which fetch
+//! toolchain bytes, unpack anything, or spawn a worker. A provider that answers
+//! them correctly gets the router's
 //! entire download, verification, install, reuse, and pooling pipeline for free,
 //! and a provider that would like to reimplement any of that cannot.
 //!
@@ -15,7 +16,8 @@
 use std::sync::Arc;
 
 use tinyruntime_bus::{
-    Distribution, Language, LanguageStatus, ProviderDescriptor, RuntimeLayout, RuntimeSettings,
+    Distribution, EnvironmentPreparationPlan, EnvironmentPreparationRequest, Language,
+    LanguageStatus, ProviderCapability, ProviderDescriptor, RuntimeLayout, RuntimeSettings,
     WorkerHarness,
 };
 
@@ -29,7 +31,7 @@ pub(crate) mod stub;
 pub use bus::BusProvider;
 pub use registry::Registry;
 
-/// The five questions only a language module can answer.
+/// The five required questions and optional descriptions a language module can answer.
 ///
 /// Everything a provider returns is a description. Nothing it returns is a side
 /// effect: the router downloads what [`Provider::select_distribution`] names,
@@ -91,6 +93,18 @@ pub trait Provider: std::fmt::Debug + Send + Sync {
     /// Returns [`Error::ProviderUnavailable`] when the provider cannot be
     /// reached.
     async fn harness(&self) -> Result<WorkerHarness>;
+
+    /// Describe native steps for an optional provider-owned environment setup.
+    ///
+    /// The router calls this only when [`ProviderDescriptor::capabilities`]
+    /// advertises [`ProviderCapability::PrepareEnvironment`]. Implementations
+    /// that do not support the capability keep the default `None` response.
+    async fn prepare_environment(
+        &self,
+        _request: &EnvironmentPreparationRequest,
+    ) -> Result<Option<EnvironmentPreparationPlan>> {
+        Ok(None)
+    }
 }
 
 /// One language the router can route to.
@@ -123,7 +137,11 @@ impl Route {
     /// a reason rather than as an error that hides every other language too.
     pub async fn status(&self) -> LanguageStatus {
         match self.provider.describe().await {
-            Ok(descriptor) if tinyruntime_bus::is_compatible(descriptor.contract_version) => {
+            Ok(descriptor)
+                if tinyruntime_bus::version::provider_is_compatible(
+                    descriptor.contract_version,
+                ) =>
+            {
                 LanguageStatus::available(
                     self.language.clone(),
                     self.bus_name.clone(),
@@ -148,6 +166,31 @@ impl Route {
             ),
         }
     }
+
+    /// Ask an advertised provider for its declarative environment setup plan.
+    ///
+    /// Providers that do not advertise the optional capability return `None`
+    /// without an extra bus call, so the original five-member provider
+    /// interface remains sufficient for existing languages.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::ProviderUnavailable`] when the provider cannot be
+    /// reached or fails to answer an advertised operation.
+    pub async fn prepare_environment(
+        &self,
+        request: &EnvironmentPreparationRequest,
+    ) -> Result<Option<EnvironmentPreparationPlan>> {
+        let descriptor = self.provider.describe().await?;
+        verify_contract(&self.language, &descriptor)?;
+        if !descriptor
+            .capabilities
+            .contains(&ProviderCapability::PrepareEnvironment)
+        {
+            return Ok(None);
+        }
+        self.provider.prepare_environment(request).await
+    }
 }
 
 /// Refuse a provider whose contract this build cannot bind to.
@@ -161,7 +204,7 @@ impl Route {
 ///
 /// Returns [`Error::ProviderContract`] when the versions cannot bind.
 pub(crate) fn verify_contract(language: &Language, descriptor: &ProviderDescriptor) -> Result<()> {
-    if tinyruntime_bus::is_compatible(descriptor.contract_version) {
+    if tinyruntime_bus::version::provider_is_compatible(descriptor.contract_version) {
         return Ok(());
     }
     let (major, minor) = descriptor.contract_version;
