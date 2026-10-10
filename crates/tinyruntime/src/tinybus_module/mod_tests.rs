@@ -32,12 +32,9 @@ impl FakeProvider {
     async fn describe(&self) -> TinyBusResult<ProviderDescriptor> {
         // The interface macro dispatches futures, so every member is `async`
         // even where the answer is a constant.
-        std::future::ready(Ok(ProviderDescriptor::new(
-            Language::nodejs(),
-            "Fake Node.js",
-            "1.0.0",
-        )))
-        .await
+        let mut descriptor = ProviderDescriptor::new(Language::nodejs(), "Fake Node.js", "1.0.0");
+        descriptor.contract_version = (1, 0);
+        std::future::ready(Ok(descriptor)).await
     }
 
     async fn detect_system(&self, _settings: RuntimeSettings) -> TinyBusResult<LayoutResponse> {

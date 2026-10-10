@@ -229,8 +229,8 @@ pub enum ProviderCapability {
     PrepareEnvironment,
     /// A newer provider capability this router does not implement.
     ///
-    /// Unknown values are retained during descriptor decoding so a provider
-    /// can add an unrelated capability without breaking older routers.
+    /// Unknown values are accepted and ignored during descriptor decoding so a
+    /// provider can add an unrelated capability without breaking older routers.
     #[serde(other)]
     Unknown,
 }
