@@ -3,7 +3,9 @@
 A host may approve named absolute cache scopes at module load. WorkerPrepareCached
 adds a known reservation, an unchanged worker plan and one declarative cache
 recipe; existing members keep their arities. No scopes are approved by default.
-Router contract 1.2 introduces this member; unchanged providers remain 1.0.
+Router contract 1.2 introduced this member; contract 1.3 adds optional provider
+preparation capability vocabulary and per-command deadlines. Unchanged
+providers remain compatible at 1.0.
 Legacy-cache adoption defaults to `strict`, including when the policy field is
 omitted from an older serialized recipe. A host may explicitly select
 `adopt_verified_legacy` during migration.
@@ -13,7 +15,11 @@ required relative entries, and exact readiness marker bytes. No language,
 package, model or interpreter convention is compiled into the router. Approved
 subprocess recipes are trusted native programs, not a model tool or filesystem
 sandbox. They provision at the approved final cache location: moving a prepared
-interpreter environment would break programs that embed absolute paths.
+interpreter environment would break programs that embed absolute paths. The
+whole cache deadline is capped at four hours so the legacy venv, three pip and
+model-preload steps can retain their distinct budgets. Each command may set an
+optional deadline up to thirty minutes; absent deadlines use the remaining
+whole-operation budget, and every command is still capped by that remainder.
 
 Before cache access, reject unapproved scopes, nonabsolute/root scopes, traversal,
 credential-store components, invalid portable relative paths and oversized

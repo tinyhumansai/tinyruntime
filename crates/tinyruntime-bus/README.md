@@ -16,9 +16,10 @@ This crate defines both halves of the system, because they are two views of one
 agreement and splitting them would let the halves drift.
 
 `INTERFACE` is what a **host** calls: resolve a language, run something on it,
-ask what is available. `PROVIDER_INTERFACE` is what the **router** calls: the
-five questions only a language module can answer. The router is a consumer of
-the second exactly as a host is a consumer of the first.
+ask what is available. `PROVIDER_INTERFACE` is what the **router** calls: five
+required questions a language module can answer, plus optional operations
+advertised by capability. The router is a consumer of the second exactly as a
+host is a consumer of the first.
 
 Every provider implements `PROVIDER_INTERFACE` — that is what makes them
 interchangeable — and claims its own well-known bus name, because two peers
@@ -47,9 +48,12 @@ touched by anything in this crate. A payload type describes what a frame
 carries, not what a module does with it.
 
 Worker cache payloads are declarative vocabulary only: approved scope IDs,
-bounded artifact and required-entry descriptions, native command values,
-marker bytes, and adoption policy. Filesystem checks, recipe identity hashing,
-locking, process execution and publication stay in the router implementation.
+bounded artifact and required-entry descriptions, native command values and
+optional per-command deadlines, marker bytes, and adoption policy. Filesystem
+checks, recipe identity hashing, locking, process execution and publication
+stay in the router implementation. Provider capabilities and their
+environment-preparation request/plan are descriptions; the router does not
+interpret package names or provider-specific arguments.
 
 **No transport.** This crate does not depend on `tinybus` and holds no
 connection, client, or codec. A host already owns its connection — its reconnect

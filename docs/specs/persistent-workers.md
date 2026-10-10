@@ -43,3 +43,9 @@ not enter public operational error messages or logs.
 New router members advance the router contract minor version. Existing provider
 members remain version1.0-compatible; router-only additions do not require an old
 provider to expose unrelated operations. Existing member arities remain unchanged.
+Provider descriptors omit an empty capability list, preserving the original
+wire shape. `PrepareEnvironment` is optional and is called only when the
+descriptor advertises `prepare_environment`; it returns native setup commands
+and the prepared executable without executing them. Each command can carry an
+optional deadline. Four hours bounds a whole cache recipe and thirty minutes
+bounds each individual command.

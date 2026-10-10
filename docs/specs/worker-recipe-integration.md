@@ -26,13 +26,20 @@ The root still owns the following implementation until later adapter switches:
 | `vendor/tinyruntime/crates/tinyruntime-pyserver/src/server.py` | Backend dispatch, tokenizer/model loading and Kompress algorithm | TinyJuice owns ML worker recipe/source |
 
 `tinyruntime-python` remains describe-only: no installation, archive downloads,
-cache writes or worker spawning. A follow-up contract must define declarative
-preparation vocabulary in router-owned `tinyruntime-bus`, publish it canonically,
-then update the provider's pinned contract separately. Do not duplicate payload
+cache writes or worker spawning. This router source slice defines an optional
+`prepare_environment` capability, host-selected setup inputs and provider-authored
+commands, plus optional per-command deadlines. Its descriptor field is omitted
+when empty, so existing provider wire representations and the original five
+members remain usable. The canonical router source must be reviewed and made
+available before the standalone provider pins it; do not duplicate payload
 structs or edit the provider's vendored runtime checkout to bypass that ordering.
 
-The generic cache recipe can preserve existing cache locations and marker bytes,
-but the Python provider and TinyJuice recipes have not been integrated yet.
+The generic cache recipe preserves existing cache locations and marker bytes.
+Its whole deadline is capped at four hours and each preparation command may
+retain its own deadline up to thirty minutes, preserving the legacy 120-second
+venv and 1800-second pip/model budgets without exceeding the enclosing deadline.
+The long-lived worker uses the independent startup timeout. The Python provider
+and TinyJuice recipes have not been integrated yet.
 Preserve installation locking, stable backend order, cached provisioning and
 offline model-load flags during those owner slices. Python-specific path and
 package conventions belong to the provider, while model readiness and
