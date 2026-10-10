@@ -5,15 +5,18 @@
 //! an answer it could not have produced itself. That is the whole design working
 //! end to end — two modules, one contract, no language knowledge in the router.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::unused_async)]
 
 use tinybus::broker::Broker;
 use tinybus::transport::memory::MemoryBus;
 use tinybus::{Connection, Interface, Result as TinyBusResult};
 
+use tinyruntime_bus::worker::WorkerCommand;
 use tinyruntime_bus::{
-    ExecRequest, ExecResponse, Language, LanguagesResponse, LayoutRequest, LayoutResponse,
-    ProviderDescriptor, ResolveRequest, ResolveResponse, RuntimeLayout, RuntimeSettings,
-    RuntimeSource, WorkerHarness, names,
+    EnvironmentPreparationPlan, EnvironmentPreparationRequest, ExecRequest, ExecResponse, Language,
+    LanguagesResponse, LayoutRequest, LayoutResponse, PackageGroup, PrepareEnvironmentRequest,
+    ProviderCapability, ProviderDescriptor, ResolveRequest, ResolveResponse, RuntimeLayout,
+    RuntimeSettings, RuntimeSource, WorkerHarness, names,
 };
 
 use super::{RuntimeService, setup};
@@ -85,6 +88,79 @@ fn worker_harness() -> WorkerHarness {
 
 /// A second provider, so the two cannot be confused for one another.
 struct OtherFakeProvider;
+
+/// A provider whose optional environment callback is observable at the router boundary.
+struct RecipeFakeProvider;
+
+#[tinybus::interface(name = "ai.tinyhumans.runtime.Provider")]
+impl RecipeFakeProvider {
+    async fn describe(&self) -> TinyBusResult<ProviderDescriptor> {
+        Ok(
+            ProviderDescriptor::new(Language::nodejs(), "Recipe Node.js", "1.0.0")
+                .with_capability(ProviderCapability::PrepareEnvironment),
+        )
+    }
+
+    async fn detect_system(&self, _settings: RuntimeSettings) -> TinyBusResult<LayoutResponse> {
+        Ok(LayoutResponse::found(host_toolchain()))
+    }
+
+    async fn layout(&self, request: LayoutRequest) -> TinyBusResult<LayoutResponse> {
+        Ok(LayoutResponse::found(RuntimeLayout::new(
+            request.install_dir,
+            "/installed/bin",
+        )))
+    }
+
+    async fn harness(&self) -> TinyBusResult<WorkerHarness> {
+        Ok(worker_harness())
+    }
+
+    async fn prepare_environment(
+        &self,
+        request: tinyruntime_bus::EnvironmentPreparationRequest,
+    ) -> TinyBusResult<EnvironmentPreparationPlan> {
+        let packages = request
+            .package_groups
+            .iter()
+            .flat_map(|group| group.packages.iter().cloned())
+            .collect::<Vec<_>>();
+        Ok(EnvironmentPreparationPlan {
+            executable: format!("{}/bin/python", request.environment_root),
+            steps: vec![WorkerCommand {
+                executable: request.runtime_executable,
+                args: packages,
+                env: Vec::new(),
+                timeout_ms: Some(120_000),
+            }],
+        })
+    }
+}
+
+/// An advertised provider with an incompatible contract, which must be refused.
+struct IncompatibleRecipeProvider;
+
+#[tinybus::interface(name = "ai.tinyhumans.runtime.Provider")]
+impl IncompatibleRecipeProvider {
+    async fn describe(&self) -> TinyBusResult<ProviderDescriptor> {
+        let mut descriptor = ProviderDescriptor::new(Language::nodejs(), "Future Node.js", "1.0.0")
+            .with_capability(ProviderCapability::PrepareEnvironment);
+        descriptor.contract_version = (2, 0);
+        Ok(descriptor)
+    }
+
+    async fn detect_system(&self, _settings: RuntimeSettings) -> TinyBusResult<LayoutResponse> {
+        Ok(LayoutResponse::missing())
+    }
+
+    async fn layout(&self, _request: LayoutRequest) -> TinyBusResult<LayoutResponse> {
+        Ok(LayoutResponse::missing())
+    }
+
+    async fn harness(&self) -> TinyBusResult<WorkerHarness> {
+        Ok(worker_harness())
+    }
+}
 
 #[tinybus::interface(name = "ai.tinyhumans.runtime.Provider")]
 impl OtherFakeProvider {
@@ -223,6 +299,112 @@ async fn a_provider_module_on_the_bus_is_listed_as_available() -> TinyBusResult<
         reply.languages[0].display_name.as_deref(),
         Some("Fake Node.js")
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn host_recipe_request_is_negotiated_through_the_router_for_an_old_provider()
+-> TinyBusResult<()> {
+    let bus = bus();
+    let scratch = tempfile::tempdir().unwrap();
+
+    let provider = Connection::connect(bus.connect().await?).await?;
+    provider
+        .serve_at(
+            names::object_path_for(FAKE_BUS_NAME).as_str().try_into()?,
+            FakeProvider,
+        )
+        .await?;
+    provider.request_name(FAKE_BUS_NAME).await?;
+
+    let module = Connection::connect(bus.connect().await?).await?;
+    setup(module, config_routing_node(scratch.path())).await?;
+
+    let client = Connection::connect(bus.connect().await?).await?;
+    let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    let reply: Option<EnvironmentPreparationPlan> = proxy
+        .call(
+            names::methods::PREPARE_ENVIRONMENT,
+            (PrepareEnvironmentRequest::new(
+                Language::nodejs(),
+                EnvironmentPreparationRequest::new("/usr/bin/node", "/approved/env"),
+            ),),
+        )
+        .await?;
+
+    assert!(reply.is_none(), "an old five-member provider has no recipe");
+    Ok(())
+}
+
+#[tokio::test]
+async fn host_recipe_request_round_trips_through_the_router_to_an_advertising_provider()
+-> TinyBusResult<()> {
+    let bus = bus();
+    let scratch = tempfile::tempdir().unwrap();
+
+    let provider = Connection::connect(bus.connect().await?).await?;
+    provider
+        .serve_at(
+            names::object_path_for(FAKE_BUS_NAME).as_str().try_into()?,
+            RecipeFakeProvider,
+        )
+        .await?;
+    provider.request_name(FAKE_BUS_NAME).await?;
+
+    let module = Connection::connect(bus.connect().await?).await?;
+    setup(module, config_routing_node(scratch.path())).await?;
+
+    let client = Connection::connect(bus.connect().await?).await?;
+    let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    let request = PrepareEnvironmentRequest::new(
+        Language::nodejs(),
+        EnvironmentPreparationRequest::new("/runtime/python", "/approved/env")
+            .with_package_group(PackageGroup::new(["numpy", "torch"])),
+    );
+    let reply: Option<EnvironmentPreparationPlan> = proxy
+        .call(names::methods::PREPARE_ENVIRONMENT, (request,))
+        .await?;
+    let plan = reply.expect("advertised provider returns its native recipe");
+
+    assert_eq!(plan.executable, "/approved/env/bin/python");
+    assert_eq!(plan.steps.len(), 1);
+    assert_eq!(plan.steps[0].executable, "/runtime/python");
+    assert_eq!(plan.steps[0].args, ["numpy", "torch"]);
+    assert_eq!(plan.steps[0].timeout_ms, Some(120_000));
+    Ok(())
+}
+
+#[tokio::test]
+async fn router_refuses_an_incompatible_provider_recipe_without_fallback() -> TinyBusResult<()> {
+    let bus = bus();
+    let scratch = tempfile::tempdir().unwrap();
+
+    let provider = Connection::connect(bus.connect().await?).await?;
+    provider
+        .serve_at(
+            names::object_path_for(FAKE_BUS_NAME).as_str().try_into()?,
+            IncompatibleRecipeProvider,
+        )
+        .await?;
+    provider.request_name(FAKE_BUS_NAME).await?;
+
+    let module = Connection::connect(bus.connect().await?).await?;
+    setup(module, config_routing_node(scratch.path())).await?;
+
+    let client = Connection::connect(bus.connect().await?).await?;
+    let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    let error = proxy
+        .call::<Option<EnvironmentPreparationPlan>>(
+            names::methods::PREPARE_ENVIRONMENT,
+            (PrepareEnvironmentRequest::new(
+                Language::nodejs(),
+                EnvironmentPreparationRequest::new("/runtime/python", "/approved/env"),
+            ),),
+        )
+        .await
+        .expect_err("an incompatible provider cannot supply a recipe");
+
+    assert!(error.to_string().contains("contract 2.0"), "{error}");
     Ok(())
 }
 

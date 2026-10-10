@@ -182,6 +182,7 @@ impl Route {
         request: &EnvironmentPreparationRequest,
     ) -> Result<Option<EnvironmentPreparationPlan>> {
         let descriptor = self.provider.describe().await?;
+        verify_contract(&self.language, &descriptor)?;
         if !descriptor
             .capabilities
             .contains(&ProviderCapability::PrepareEnvironment)

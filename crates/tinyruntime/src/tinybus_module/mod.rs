@@ -25,8 +25,8 @@ use std::sync::Arc;
 use tinybus::{Connection, Result as TinyBusResult};
 
 use tinyruntime_bus::{
-    ExecRequest, ExecResponse, LanguagesResponse, PoolStatsResponse, ResolveRequest,
-    ResolveResponse, names,
+    ExecRequest, ExecResponse, LanguagesResponse, PoolStatsResponse, PrepareEnvironmentRequest,
+    ResolveRequest, ResolveResponse, names,
 };
 
 use crate::config::ModuleConfig;
@@ -69,6 +69,17 @@ impl RuntimeService {
     /// Every live worker pool's counters.
     async fn pool_stats(&self) -> TinyBusResult<PoolStatsResponse> {
         Ok(PoolStatsResponse::new(self.engine.pool_stats().await))
+    }
+
+    /// Ask the configured language provider to describe an optional environment recipe.
+    async fn prepare_environment(
+        &self,
+        request: PrepareEnvironmentRequest,
+    ) -> TinyBusResult<Option<tinyruntime_bus::EnvironmentPreparationPlan>> {
+        self.engine
+            .prepare_environment(&request.language, &request.preparation)
+            .await
+            .map_err(|error| failed(&error))
     }
     /// Reserve a known handle before worker side effects.
     async fn worker_reserve(&self) -> TinyBusResult<tinyruntime_bus::worker::WorkerHandle> {
@@ -192,7 +203,7 @@ pub(crate) mod exports {
         config = ModuleConfig,
         worker_threads = 2,
         provides = ["ai.tinyhumans.runtime.Runtime"],
-        methods = ["Languages", "Resolve", "Execute", "PoolStats", "WorkerReserve", "WorkerPrepare", "WorkerPrepareCached", "WorkerStart", "WorkerRequest", "WorkerStatus", "WorkerStop", "WorkerShutdown"],
+        methods = ["Languages", "Resolve", "Execute", "PoolStats", "PrepareEnvironment", "WorkerReserve", "WorkerPrepare", "WorkerPrepareCached", "WorkerStart", "WorkerRequest", "WorkerStatus", "WorkerStop", "WorkerShutdown"],
         signals = [],
         requires = [],
         optional = ["ai.tinyhumans.runtime.Provider"],
