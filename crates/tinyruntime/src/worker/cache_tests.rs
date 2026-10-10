@@ -47,6 +47,7 @@ fn step(source: &str) -> WorkerCommand {
         executable: "/bin/sh".into(),
         args: vec!["-c".into(), source.into()],
         env: Vec::new(),
+        timeout_ms: None,
     }
 }
 
@@ -66,7 +67,7 @@ async fn prepare(manager: &WorkerManager, recipe: CacheRecipe) -> (WorkerHandle,
 #[cfg(unix)]
 async fn wait_file(path: &std::path::Path) {
     tokio::time::timeout(Duration::from_secs(5), async {
-        while !path.exists() {
+        while !path.is_file() || path.metadata().is_ok_and(|metadata| metadata.len() == 0) {
             tokio::task::yield_now().await;
         }
     })
