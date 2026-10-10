@@ -120,6 +120,30 @@ fn an_old_provider_descriptor_keeps_its_wire_shape_and_defaults_capabilities() {
 }
 
 #[test]
+fn unknown_provider_capabilities_do_not_break_older_routers() {
+    let descriptor: ProviderDescriptor = serde_json::from_value(serde_json::json!({
+        "language":"python",
+        "display_name":"Python",
+        "default_version":"3.12",
+        "contract_version":[1, 5],
+        "executables":["python"],
+        "capabilities":["prepare_environment", "future_recipe_kind"]
+    }))
+    .unwrap();
+
+    assert_eq!(
+        descriptor.capabilities,
+        vec![
+            super::ProviderCapability::PrepareEnvironment,
+            super::ProviderCapability::Unknown,
+        ]
+    );
+    assert!(crate::version::provider_is_compatible(
+        descriptor.contract_version
+    ));
+}
+
+#[test]
 fn the_distribution_wire_form_is_pinned() {
     let dist = Distribution::new(
         "1.2.3",

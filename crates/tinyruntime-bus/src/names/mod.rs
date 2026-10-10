@@ -74,6 +74,9 @@ pub mod methods {
     ///
     /// Returns a [`crate::PoolStatsResponse`].
     pub const POOL_STATS: &str = "PoolStats";
+
+    /// Describes an optional environment recipe through the configured provider.
+    pub const PREPARE_ENVIRONMENT: &str = "PrepareEnvironment";
     /// Generic persistent worker lifecycle member `WorkerReserve`.
     pub const WORKER_RESERVE: &str = "WorkerReserve";
 
@@ -165,6 +168,7 @@ pub const METHODS: &[&str] = &[
     methods::RESOLVE,
     methods::EXECUTE,
     methods::POOL_STATS,
+    methods::PREPARE_ENVIRONMENT,
     methods::WORKER_RESERVE,
     methods::WORKER_PREPARE,
     methods::WORKER_PREPARE_CACHED,

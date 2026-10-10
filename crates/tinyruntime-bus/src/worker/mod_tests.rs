@@ -50,7 +50,7 @@ fn declarative_cache_recipe_keeps_exact_bytes_and_entry_kinds_on_wire() {
     let recipe: CacheRecipe = serde_json::from_value(wire.clone()).unwrap();
     assert_eq!(recipe.artifacts[0].bytes, vec![0, 255]);
     assert_eq!(serde_json::to_value(recipe).unwrap(), wire);
-    assert_eq!(crate::CONTRACT_VERSION, (1, 3));
+    assert_eq!(crate::CONTRACT_VERSION, (1, 4));
     assert!(crate::version::provider_is_compatible((1, 0)));
     let legacy: CacheRecipe = serde_json::from_value(serde_json::json!({
         "scope":"cache","artifacts":[],"steps":[],"required":[],

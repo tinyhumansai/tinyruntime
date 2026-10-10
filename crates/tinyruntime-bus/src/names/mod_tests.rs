@@ -45,6 +45,7 @@ fn every_router_member_is_listed_once() {
             methods::RESOLVE,
             methods::EXECUTE,
             methods::POOL_STATS,
+            methods::PREPARE_ENVIRONMENT,
             methods::WORKER_RESERVE,
             methods::WORKER_PREPARE,
             methods::WORKER_PREPARE_CACHED,

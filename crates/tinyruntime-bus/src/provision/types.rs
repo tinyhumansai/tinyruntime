@@ -227,6 +227,32 @@ impl ProviderDescriptor {
 pub enum ProviderCapability {
     /// Describe how to create a language environment and install named packages.
     PrepareEnvironment,
+    /// A newer provider capability this router does not implement.
+    ///
+    /// Unknown values are retained during descriptor decoding so a provider
+    /// can add an unrelated capability without breaking older routers.
+    #[serde(other)]
+    Unknown,
+}
+
+/// A host's language-scoped request to the router's provider preparation bridge.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrepareEnvironmentRequest {
+    /// Language whose configured provider should describe the recipe.
+    pub language: crate::Language,
+    /// Generic provider inputs selected by the recipe owner and host.
+    pub preparation: EnvironmentPreparationRequest,
+}
+
+impl PrepareEnvironmentRequest {
+    /// Builds a bridge request for one language.
+    #[must_use]
+    pub fn new(language: crate::Language, preparation: EnvironmentPreparationRequest) -> Self {
+        Self {
+            language,
+            preparation,
+        }
+    }
 }
 
 /// Host-selected inputs for a provider's declarative environment recipe.
