@@ -90,13 +90,7 @@ impl Registry {
             .routes
             .iter()
             .find(|route| &route.language == language)
-            .ok_or_else(|| {
-                if language.is_empty() {
-                    Error::LanguageMissing
-                } else {
-                    Error::UnknownLanguage(language.clone())
-                }
-            })?;
+            .ok_or_else(|| Error::UnknownLanguage(language.clone()))?;
         route.prepare_environment(request).await
     }
 
