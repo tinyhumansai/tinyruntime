@@ -26,9 +26,16 @@ pub fn current_dir(
     // syscall and constructs an errno-backed io::Error (no allocation, locks,
     // environment access, or destructors). It never changes the parent cwd.
     unsafe {
-        command.pre_exec(move || rustix::process::fchdir(&directory).map_err(Into::into));
+        command.pre_exec(directory_callback(directory));
     }
     Ok(())
+}
+
+// Keep the exact post-fork operation testable without forking: LLVM counters
+// updated in a child that execs are not written into the parent's profile.
+#[cfg(unix)]
+fn directory_callback(directory: std::os::fd::OwnedFd) -> impl FnMut() -> std::io::Result<()> {
+    move || rustix::process::fchdir(&directory).map_err(Into::into)
 }
 
 #[cfg(all(test, unix))]
