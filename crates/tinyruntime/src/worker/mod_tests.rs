@@ -1070,17 +1070,42 @@ async fn startup_failures_leave_the_same_operation_retryable() {
     let root = tempfile::tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
-    let source = format!("if [ ! -f started ]; then touch started; printf 'invalid\\n'; exit; fi\n{HEALTHY}");
-    assert_eq!(manager.prepare(WorkerPrepare { handle: handle.clone(), plan: plan(&source) }).await.kind, WorkerOutcomeKind::Complete);
-    let request = WorkerRequest { handle: handle.clone(), operation: 20, method: "alpha.run".into(), params: serde_json::Value::Null };
-    assert_eq!(manager.request(request.clone()).await.kind, WorkerOutcomeKind::Failed);
-    assert_eq!(manager.request(request.clone()).await.reason.as_deref(), Some("startup_backoff"));
+    let source = format!(
+        "if [ ! -f started ]; then touch started; printf 'invalid\\n'; exit; fi\n{HEALTHY}"
+    );
+    assert_eq!(
+        manager
+            .prepare(WorkerPrepare {
+                handle: handle.clone(),
+                plan: plan(&source)
+            })
+            .await
+            .kind,
+        WorkerOutcomeKind::Complete
+    );
+    let request = WorkerRequest {
+        handle: handle.clone(),
+        operation: 20,
+        method: "alpha.run".into(),
+        params: serde_json::Value::Null,
+    };
+    assert_eq!(
+        manager.request(request.clone()).await.kind,
+        WorkerOutcomeKind::Failed
+    );
+    assert_eq!(
+        manager.request(request.clone()).await.reason.as_deref(),
+        Some("startup_backoff")
+    );
     tokio::time::pause();
     tokio::time::advance(Duration::from_secs(301)).await;
     tokio::time::resume();
     let result = manager.request(request.clone()).await;
     assert_eq!(result.kind, WorkerOutcomeKind::Response);
-    assert_eq!(manager.request(request).await.response.unwrap().result, result.response.unwrap().result);
+    assert_eq!(
+        manager.request(request).await.response.unwrap().result,
+        result.response.unwrap().result
+    );
     manager.shutdown().await;
 }
 
@@ -1093,9 +1118,27 @@ async fn preparation_rejects_a_linked_worker_directory_without_outside_changes()
     std::fs::set_permissions(outside.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
-    std::os::unix::fs::symlink(outside.path(), root.path().join(handle.0.replace(':', "_"))).unwrap();
-    assert_eq!(manager.prepare(WorkerPrepare { handle, plan: plan(HEALTHY) }).await.reason.as_deref(), Some("install_failed"));
+    std::os::unix::fs::symlink(outside.path(), root.path().join(handle.0.replace(':', "_")))
+        .unwrap();
+    assert_eq!(
+        manager
+            .prepare(WorkerPrepare {
+                handle,
+                plan: plan(HEALTHY)
+            })
+            .await
+            .reason
+            .as_deref(),
+        Some("install_failed")
+    );
     assert!(!outside.path().join("worker-script").exists());
-    assert_eq!(std::fs::metadata(outside.path()).unwrap().permissions().mode() & 0o777, 0o755);
+    assert_eq!(
+        std::fs::metadata(outside.path())
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o755
+    );
     manager.shutdown().await;
 }

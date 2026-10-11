@@ -272,3 +272,10 @@ use cap_fs_ext::DirExt;
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod tests;
+
+/// Pin the private worker directory through component-by-component no-follow opens.
+pub(super) fn open_worker_directory(
+    path: &std::path::Path,
+) -> Result<cap_std::fs::Dir, &'static str> {
+    filesystem::absolute(path, true)
+}

@@ -23,6 +23,7 @@ const BACKOFF: Duration = Duration::from_secs(300);
 struct Actor {
     plan: Arc<WorkerPlan>,
     root: PathBuf,
+    directory: Option<cap_std::fs::Dir>,
     process: Option<Process>,
     preparation: Option<Preparation>,
     cached: Option<Cached>,
@@ -47,6 +48,7 @@ pub(super) async fn run(
     let mut actor = Actor {
         plan,
         root,
+        directory: None,
         process: None,
         preparation: None,
         cached,
@@ -228,7 +230,7 @@ impl Actor {
             return outcome(WorkerOutcomeKind::Failed, Some("install_failed"));
         }
         for step in &self.plan.preparation {
-            match Preparation::spawn(step, &self.root) {
+            match Preparation::spawn(step, &self.execution_root()) {
                 Ok(process) => self.preparation = Some(process),
                 Err(reason) => return outcome(WorkerOutcomeKind::Failed, Some(reason)),
             }
@@ -251,17 +253,20 @@ impl Actor {
         outcome(WorkerOutcomeKind::Complete, None)
     }
 
-    async fn install_script(&self) -> std::io::Result<()> {
+    async fn install_script(&mut self) -> std::io::Result<()> {
         use cap_fs_ext::{FollowSymlinks, MetadataExt, OpenOptionsFollowExt, OpenOptionsSyncExt};
         use tokio::io::AsyncWriteExt;
-        tokio::fs::create_dir_all(&self.root).await?;
+        let directory =
+            super::cache::open_worker_directory(&self.root).map_err(std::io::Error::other)?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            tokio::fs::set_permissions(&self.root, std::fs::Permissions::from_mode(0o700)).await?;
+            directory
+                .try_clone()?
+                .into_std_file()
+                .set_permissions(std::fs::Permissions::from_mode(0o700))?;
         }
-        let directory =
-            cap_std::fs::Dir::open_ambient_dir(&self.root, cap_std::ambient_authority())?;
+        self.directory = Some(directory.try_clone()?);
         let mut options = cap_std::fs::OpenOptions::new();
         options
             .write(true)
@@ -287,6 +292,21 @@ impl Actor {
         }
         file.set_len(0).await?;
         file.write_all(self.plan.source.as_bytes()).await
+    }
+
+    // The child changes directory before exec while this descriptor is still open.
+    // Its relative script argument then resolves against the pinned working directory.
+    fn execution_root(&self) -> PathBuf {
+        #[cfg(unix)]
+        if let Some(directory) = &self.directory {
+            use std::os::fd::AsRawFd;
+            #[cfg(target_os = "linux")]
+            let prefix = "/proc/self/fd";
+            #[cfg(not(target_os = "linux"))]
+            let prefix = "/dev/fd";
+            return PathBuf::from(prefix).join(directory.as_raw_fd().to_string());
+        }
+        self.root.clone()
     }
 
     async fn cleanup(&mut self) -> Result<(), &'static str> {
@@ -374,8 +394,8 @@ impl Actor {
             .send_modify(|s| s.status.phase = WorkerPhase::Starting);
         let result = match Process::spawn(
             &self.plan.command,
-            &self.root,
-            &self.root.join("worker-script"),
+            &self.execution_root(),
+            std::path::Path::new("./worker-script"),
         ) {
             Ok(process) => {
                 self.process = Some(process);
@@ -449,64 +469,92 @@ impl Actor {
         if request.operation <= self.highest.saturating_sub(REPLAY_WINDOW) {
             return outcome(WorkerOutcomeKind::Expired, None);
         }
-        let result = self.dispatch(&request, deadline).await;
-        self.highest = self.highest.max(request.operation);
-        self.replies
-            .retain(|id, _| *id > self.highest.saturating_sub(REPLAY_WINDOW));
-        self.replies
-            .insert(request.operation, (request, result.clone()));
+        let (result, attempted) = self.dispatch(&request, deadline).await;
+        if attempted {
+            self.highest = self.highest.max(request.operation);
+            self.replies
+                .retain(|id, _| *id > self.highest.saturating_sub(REPLAY_WINDOW));
+            self.replies
+                .insert(request.operation, (request, result.clone()));
+        }
         result
     }
 
-    async fn dispatch(&mut self, request: &WorkerRequest, deadline: Instant) -> WorkerOutcome {
+    async fn dispatch(
+        &mut self,
+        request: &WorkerRequest,
+        deadline: Instant,
+    ) -> (WorkerOutcome, bool) {
+        let mut attempted = false;
         let wire = ServerRequest {
             id: request.operation.to_string(),
             method: request.method.clone(),
             params: request.params.clone(),
         };
         if Instant::now() >= deadline {
-            return outcome(WorkerOutcomeKind::Failed, Some("request_timeout"));
+            return (
+                outcome(WorkerOutcomeKind::Failed, Some("request_timeout")),
+                attempted,
+            );
         }
         let mut reason = "worker_closed";
         for attempt in 0..2 {
             let Ok(started) = tokio::time::timeout_at(deadline, self.start()).await else {
                 if self.cleanup().await.is_err() {
-                    return outcome(WorkerOutcomeKind::Failed, Some("cleanup_failed"));
+                    return (
+                        outcome(WorkerOutcomeKind::Failed, Some("cleanup_failed")),
+                        attempted,
+                    );
                 }
-                return outcome(WorkerOutcomeKind::Failed, Some("request_timeout"));
+                return (
+                    outcome(WorkerOutcomeKind::Failed, Some("request_timeout")),
+                    attempted,
+                );
             };
             if started.kind != WorkerOutcomeKind::Complete {
-                return started;
+                return (started, attempted);
             }
             let Some(process) = &mut self.process else {
-                return outcome(WorkerOutcomeKind::Failed, Some("worker_closed"));
+                return (
+                    outcome(WorkerOutcomeKind::Failed, Some("worker_closed")),
+                    attempted,
+                );
             };
             let result = tokio::select! {
                 biased;
                 () = native::canceled(&mut self.stop) => Err("canceled"),
-                result = tokio::time::timeout_at(deadline, process.request(&wire)) => result.unwrap_or(Err("request_timeout")),
+                result = tokio::time::timeout_at(deadline, async {
+                    attempted = true;
+                    process.request(&wire).await
+                }) => result.unwrap_or(Err("request_timeout")),
             };
             match result {
                 Ok(response) if response.ok || attempt == 1 => {
                     if response.ok {
                         self.last_used = Instant::now();
                     }
-                    return WorkerOutcome {
-                        kind: WorkerOutcomeKind::Response,
-                        response: Some(response),
-                        reason: None,
-                    };
+                    return (
+                        WorkerOutcome {
+                            kind: WorkerOutcomeKind::Response,
+                            response: Some(response),
+                            reason: None,
+                        },
+                        attempted,
+                    );
                 }
                 Ok(_) => reason = "remote_failed",
                 Err(error) => reason = error,
             }
             if self.cleanup().await.is_err() {
-                return outcome(WorkerOutcomeKind::Failed, Some("cleanup_failed"));
+                return (
+                    outcome(WorkerOutcomeKind::Failed, Some("cleanup_failed")),
+                    attempted,
+                );
             }
             if *self.stop.borrow() || Instant::now() >= deadline {
                 break;
             }
         }
-        outcome(WorkerOutcomeKind::Failed, Some(reason))
+        (outcome(WorkerOutcomeKind::Failed, Some(reason)), attempted)
     }
 }
