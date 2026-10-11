@@ -1004,3 +1004,36 @@ async fn prepared_worker_reports_configured_backends_before_start() {
     assert!(status.server.message.is_none());
     assert_eq!(manager.shutdown().await.kind, WorkerOutcomeKind::Complete);
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn preparation_rejects_linked_and_special_script_entries_without_outside_writes() {
+    use std::os::unix::fs::PermissionsExt;
+    for entry in ["symlink", "hardlink", "fifo", "directory"] {
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let target = outside.path().join("untouched");
+        std::fs::write(&target, "outside content").unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o640)).unwrap();
+        let manager = WorkerManager::new(root.path().to_path_buf());
+        let handle = manager.reserve().await.unwrap();
+        let directory = root.path().join(handle.0.replace(':', "_"));
+        std::fs::create_dir_all(&directory).unwrap();
+        let script = directory.join("worker-script");
+        match entry {
+            "symlink" => std::os::unix::fs::symlink(&target, &script).unwrap(),
+            "hardlink" => std::fs::hard_link(&target, &script).unwrap(),
+            "fifo" => assert!(std::process::Command::new("mkfifo").arg(&script).status().unwrap().success()),
+            _ => std::fs::create_dir(&script).unwrap(),
+        }
+        let prepared = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            manager.prepare(WorkerPrepare { handle, plan: plan(HEALTHY) }),
+        ).await.unwrap();
+        assert_eq!(prepared.kind, WorkerOutcomeKind::Failed, "{entry}");
+        assert_eq!(prepared.reason, Some("install_failed".into()), "{entry}");
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "outside content", "{entry}");
+        assert_eq!(std::fs::metadata(&target).unwrap().permissions().mode() & 0o777, 0o640, "{entry}");
+        assert_eq!(tokio::time::timeout(std::time::Duration::from_secs(5), manager.shutdown()).await.unwrap().kind, WorkerOutcomeKind::Complete, "{entry}");
+    }
+}
