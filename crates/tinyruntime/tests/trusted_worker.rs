@@ -7,7 +7,12 @@ async fn trusted_host_dispatches_real_jsonl_and_cleanup() -> Result<(), String> 
         WorkerCommand, WorkerHandle, WorkerOutcome, WorkerOutcomeKind, WorkerPlan, WorkerPrepare,
         WorkerRequest, WorkerStatus,
     };
-    let scratch = tempfile::tempdir().map_err(|error| error.to_string())?;
+    // Darwin's default temp path contains the /var -> /private/var alias.
+    // Use its canonical root so the worker's no-symlink policy is exercised.
+    let temp_root = std::env::temp_dir()
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    let scratch = tempfile::tempdir_in(temp_root).map_err(|error| error.to_string())?;
     let scopes = vec![tinyruntime_bus::worker::WorkerCacheScope {
         id: "cache".into(),
         root: scratch
@@ -52,7 +57,7 @@ done
             plan: plan.clone(),
         })
         .await;
-    assert_eq!(prepared.kind, WorkerOutcomeKind::Complete);
+    assert_eq!(prepared.kind, WorkerOutcomeKind::Complete, "{prepared:?}");
     let started: WorkerOutcome = workers.start(&handle).await;
     assert_eq!(started.kind, WorkerOutcomeKind::Complete);
     let status: WorkerStatus = workers
@@ -88,7 +93,12 @@ async fn trusted_host_publishes_exact_marker_bytes() -> Result<(), String> {
         WorkerCommand, WorkerHandle, WorkerOutcome, WorkerOutcomeKind, WorkerPlan,
         WorkerPrepareCached,
     };
-    let scratch = tempfile::tempdir().map_err(|error| error.to_string())?;
+    // Darwin's default temp path contains the /var -> /private/var alias.
+    // Use its canonical root so the worker's no-symlink policy is exercised.
+    let temp_root = std::env::temp_dir()
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    let scratch = tempfile::tempdir_in(temp_root).map_err(|error| error.to_string())?;
     let scopes = vec![tinyruntime_bus::worker::WorkerCacheScope {
         id: "cache".into(),
         root: scratch
@@ -138,7 +148,7 @@ async fn trusted_host_publishes_exact_marker_bytes() -> Result<(), String> {
             },
         })
         .await;
-    assert_eq!(prepared.kind, WorkerOutcomeKind::Complete);
+    assert_eq!(prepared.kind, WorkerOutcomeKind::Complete, "{prepared:?}");
     assert_eq!(
         std::fs::read(scratch.path().join("recipe-cache/ready"))
             .map_err(|error| error.to_string())?,
