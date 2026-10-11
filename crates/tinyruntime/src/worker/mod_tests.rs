@@ -962,3 +962,23 @@ async fn directory_cleanup_retries_without_another_stop_signal() {
     .unwrap();
     assert_eq!(manager.shutdown().await.kind, WorkerOutcomeKind::Complete);
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn prepared_worker_reports_configured_backends_before_start() {
+    let root = tempfile::tempdir().unwrap();
+    let manager = WorkerManager::new(root.path().to_path_buf());
+    let handle = manager.reserve().await.unwrap();
+    let mut launch = plan(HEALTHY);
+    launch.backends = vec!["beta".into(), "alpha".into()];
+    assert_eq!(manager.prepare(WorkerPrepare { handle: handle.clone(), plan: launch }).await.kind,
+        WorkerOutcomeKind::Complete);
+    let status = manager.status(&handle).await.unwrap();
+    assert_eq!(status.phase, WorkerPhase::Prepared);
+    assert!(status.server.enabled);
+    assert!(!status.server.running);
+    assert_eq!(status.server.backends.iter().map(|backend| backend.id.as_str()).collect::<Vec<_>>(), vec!["beta", "alpha"]);
+    assert!(status.server.backends.iter().all(|backend| backend.enabled && !backend.ready));
+    assert!(status.server.message.is_none());
+    assert_eq!(manager.shutdown().await.kind, WorkerOutcomeKind::Complete);
+}
