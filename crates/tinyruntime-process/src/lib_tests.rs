@@ -42,3 +42,12 @@ fn spawning_with_a_file_as_cwd_fails_without_changing_parent_directory() {
     );
     assert_eq!(std::env::current_dir().unwrap(), parent_cwd);
 }
+
+#[test]
+fn directory_callback_preserves_the_os_error_without_changing_parent_directory() {
+    let file = tempfile::tempfile().unwrap();
+    let parent_cwd = std::env::current_dir().unwrap();
+    let mut callback = directory_callback(file.into());
+    assert_eq!(callback().unwrap_err().kind(), std::io::ErrorKind::NotADirectory);
+    assert_eq!(std::env::current_dir().unwrap(), parent_cwd);
+}
