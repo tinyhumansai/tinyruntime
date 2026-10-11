@@ -593,7 +593,12 @@ async fn a_host_runs_code_through_the_router_over_the_bus() -> TinyBusResult<()>
         crate::pool::fake_worker::Directive::Echo("over-the-bus").code(),
     );
 
-    let reply: ExecResponse = proxy.call(names::methods::EXECUTE, (request,)).await?;
+    let reply: ExecResponse = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        proxy.call(names::methods::EXECUTE, (request,)),
+    )
+    .await
+    .expect("the router must complete the worker request within 60 seconds")?;
     assert_eq!(reply.stdout, "over-the-bus");
     assert!(reply.success());
     assert_eq!(reply.runtime_version, "1.2.3");

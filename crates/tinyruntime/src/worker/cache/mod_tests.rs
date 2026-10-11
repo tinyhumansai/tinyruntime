@@ -7,9 +7,10 @@ use super::*;
 
 #[test]
 fn duplicate_and_overlapping_scope_admission_is_bounded() {
+    let scratch = crate::worker::test_tempdir().unwrap();
     let scope = WorkerCacheScope {
         id: "cache".into(),
-        root: "/tmp/cache".into(),
+        root: scratch.path().join("cache").to_string_lossy().into_owned(),
     };
     assert!(scopes(std::slice::from_ref(&scope)).is_ok());
     assert!(scopes(&[scope.clone(), scope.clone()]).is_err());

@@ -89,7 +89,9 @@ impl Session {
             }
             match lock.try_lock_exclusive() {
                 Ok(()) => break,
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                Err(error)
+                    if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() =>
+                {
                     tokio::select! {
                         biased;
                         () = super::native::canceled(stop) => return Err("canceled"),
