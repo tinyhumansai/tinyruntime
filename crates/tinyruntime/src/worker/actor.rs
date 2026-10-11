@@ -252,6 +252,7 @@ impl Actor {
     }
 
     async fn install_script(&self) -> std::io::Result<()> {
+        use cap_fs_ext::{FollowSymlinks, MetadataExt, OpenOptionsFollowExt, OpenOptionsSyncExt};
         use tokio::io::AsyncWriteExt;
         tokio::fs::create_dir_all(&self.root).await?;
         #[cfg(unix)]
@@ -259,7 +260,6 @@ impl Actor {
             use std::os::unix::fs::PermissionsExt;
             tokio::fs::set_permissions(&self.root, std::fs::Permissions::from_mode(0o700)).await?;
         }
-        use cap_fs_ext::{FollowSymlinks, MetadataExt, OpenOptionsFollowExt, OpenOptionsSyncExt};
         let directory =
             cap_std::fs::Dir::open_ambient_dir(&self.root, cap_std::ambient_authority())?;
         let mut options = cap_std::fs::OpenOptions::new();
