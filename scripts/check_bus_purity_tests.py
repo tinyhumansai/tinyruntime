@@ -2,6 +2,9 @@
 import importlib.util
 import pathlib
 import unittest
+import sys
+
+sys.dont_write_bytecode = True
 
 SCRIPT = pathlib.Path(__file__).with_name('check-bus-purity.py')
 
