@@ -74,17 +74,18 @@ impl std::io::Write for Count {
     }
 }
 
+#[derive(serde::Serialize)]
+struct Wire<'a> {
+    id: String,
+    method: &'a str,
+    params: &'a serde_json::Value,
+}
+
 pub(super) fn request(request: &WorkerRequest) -> Result<(), &'static str> {
     if request.operation == 0 || request.handle.0.len() > 64 || request.method.len() > 256 {
         return Err("request_limit");
     }
     let mut count = Count(1); // Include the terminating newline.
-    #[derive(serde::Serialize)]
-    struct Wire<'a> {
-        id: String,
-        method: &'a str,
-        params: &'a serde_json::Value,
-    }
     let wire = Wire {
         id: request.operation.to_string(),
         method: &request.method,
