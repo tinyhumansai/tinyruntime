@@ -16,7 +16,13 @@ Each caller first reserves an opaque process-local handle. Only idle reservation
 expire, after thirty seconds; admission counts live slots rather than lifetime
 identifiers. The monotonically issued identity cannot recreate retired resources.
 Prepare installs bounded script data under a module-owned private directory and
-executes a bounded list of explicit preparation commands. Start begins only once
+executes a bounded list of explicit preparation commands. Directory creation and
+opening reject symlinks component by component, and permissions are changed through
+the opened directory. On Unix the supervisor retains that directory descriptor:
+preparation and startup use its descriptor path as the working directory, and the
+worker script argument is relative to that pinned directory. Replacing the ambient
+worker path cannot redirect script installation or Unix worker startup.
+Start begins only once
 the caller knows its handle. Commands inherit only the existing safe environment
 allowlist plus explicit recipe environment. No implicit interpreter fallback.
 
@@ -33,7 +39,10 @@ legacy pyserver paths reexport them. Requests use caller-known monotonically
 increasing operation numbers, encoded as decimal string IDs on the legacy JSONL
 wire. The supervisor retains a bounded recent terminal
 reply window; evicted/stale operation numbers are rejected without reexecution.
-Concurrent out-of-order submissions remain supported within that window. A lost
+Only attempted JSONL requests advance the replay window or retain a terminal
+outcome. Startup/backoff failures and deadlines before dispatch leave the same
+operation retryable. Concurrent out-of-order submissions remain supported within
+that window. A lost
 reply is recoverable by retry while retained, and always safe from duplicate
 execution afterward. Payloads, script bytes, environment, queued commands,
 response lines and output-memory retention have explicit fixed upper bounds.
