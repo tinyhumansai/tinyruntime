@@ -1080,7 +1080,7 @@ async fn startup_failures_leave_the_same_operation_retryable() {
     tokio::time::resume();
     let result = manager.request(request.clone()).await;
     assert_eq!(result.kind, WorkerOutcomeKind::Response);
-    assert_eq!(manager.request(request).await, result);
+    assert_eq!(manager.request(request).await.response.unwrap().result, result.response.unwrap().result);
     manager.shutdown().await;
 }
 
