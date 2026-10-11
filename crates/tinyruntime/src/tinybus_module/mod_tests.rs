@@ -863,3 +863,23 @@ async fn worker_bus_errors_preserve_retry_and_identity_classifications() {
         matches!(service.worker_reserve().await.unwrap_err(), tinybus::Error::MethodFailed {name, message} if name.ends_with(".Closed") && message == "manager_shutdown")
     );
 }
+
+#[tokio::test]
+async fn public_bus_rejects_native_worker_lifecycle_members() -> TinyBusResult<()> {
+    let bus = bus();
+    let scratch = tempfile::tempdir().unwrap();
+    let module = Connection::connect(bus.connect().await?).await?;
+    setup(module, config_routing_node(scratch.path())).await?;
+    let client = Connection::connect(bus.connect().await?).await?;
+    let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    for member in [
+        "WorkerReserve", "WorkerPrepare", "WorkerPrepareCached", "WorkerStart",
+        "WorkerRequest", "WorkerStatus", "WorkerStop", "WorkerShutdown",
+    ] {
+        let error = proxy.call::<serde_json::Value>(member, ()).await.unwrap_err();
+        assert!(matches!(error, tinybus::Error::MethodFailed { name, .. }
+            if name.ends_with(".UnknownMethod")), "{member} must not be public");
+    }
+    assert!(!scratch.path().join("persistent-workers").exists());
+    Ok(())
+}
