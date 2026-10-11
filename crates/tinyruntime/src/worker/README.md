@@ -1,6 +1,9 @@
 # Persistent JSONL worker ownership
 
-`WorkerManager` accepts trusted, language-agnostic plans. It installs bounded
+`WorkerManager` accepts trusted, language-agnostic plans through its Rust API.
+The public Runtime bus interface exports no worker lifecycle methods because
+TinyBus service dispatch does not provide authenticated caller identity. Hosts
+must authorize any external caller before invoking this native Rust capability. It installs bounded
 script bytes under its private cache directory and executes only the explicit
 commands in the plan. It owns native process groups (Unix) or jobs (Windows),
 stdio framing and cleanup. Language providers and application recipes decide
@@ -36,8 +39,8 @@ Stop for sign-out if the process will reuse the module. Manager drop signals
 cleanup while the runtime is alive; abruptly stopping the runtime is not a
 replacement for the explicit shutdown barrier.
 
-Persistent cache preparation uses the separate `WorkerPrepareCached` member and
-an absolute scope approved by the host at module load. No scope is approved by
+Persistent cache preparation uses `WorkerManager::prepare_cached` and
+an absolute scope approved by the host through `with_cache_scopes`. No scope is approved by
 default. The bounded recipe carries exact router-owned artifact bytes, trusted
 native preparation commands, required entries, exact marker bytes and an
 optional migration policy. The router holds a no-follow directory capability

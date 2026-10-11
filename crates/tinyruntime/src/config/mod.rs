@@ -31,7 +31,8 @@ pub struct ModuleConfig {
     /// Where worker harnesses are written, or empty for a directory under the
     /// platform cache.
     pub harness_dir: String,
-    /// Explicit named persistent cache scopes; empty denies all cache recipes.
+    /// Explicit named persistent cache scopes for a trusted Rust host to pass to
+    /// `WorkerManager::with_cache_scopes`; the bus adapter exposes no workers.
     pub worker_cache_scopes: Vec<tinyruntime_bus::worker::WorkerCacheScope>,
 }
 

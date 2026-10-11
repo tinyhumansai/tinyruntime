@@ -6,8 +6,9 @@ installed script, explicit environment, ordered backend ids, bounded native
 preparation commands and startup/request/idle settings. The router executes
 preparation in its owned per-handle directory and appends the installed script
 path to the final worker command. The router also accepts
-`WorkerPrepareCached { handle, plan, recipe }` over the separate cache member.
-Hosts approve named absolute cache scopes at module load. Recipes describe exact
+`WorkerPrepareCached { handle, plan, recipe }` through the trusted Rust
+`WorkerManager::prepare_cached` API. Hosts approve named absolute cache scopes
+through `with_cache_scopes`. No worker lifecycle member is currently bus-exposed. Recipes describe exact
 artifact and marker bytes, required entries, native preparation commands, and
 an explicit strict-by-default legacy adoption policy. The router owns bounded
 no-follow file access, cross-process locking, recipe identity, native command
@@ -57,7 +58,9 @@ vocabulary to one shared definition. Its removal is a later independently
 reviewed host/module transition.
 
 TinyJuice's turn-bound ML callback remains host registered, but its eventual
-executor must call worker bus operations. No linked PythonServer or root pip/model
+executor must call an authorized worker adapter. The current TinyBus service API
+does not carry authenticated caller identity, so an authorization mechanism is a
+prerequisite to exposing native worker operations over the bus. No linked PythonServer or root pip/model
 fallback may survive that switch. Publish provider/TinyJuice owning PRs before
 host adapters; require compatible released native artifacts before gitlink and
 contract-only dependency admission. This document records remaining work, not

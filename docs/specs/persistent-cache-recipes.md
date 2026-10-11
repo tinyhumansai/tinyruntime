@@ -1,9 +1,10 @@
 # Persistent cache recipes
 
-A host may approve named absolute cache scopes at module load. WorkerPrepareCached
-adds a known reservation, an unchanged worker plan and one declarative cache
-recipe; existing members keep their arities. No scopes are approved by default.
-Router contract 1.2 introduced this member; contract 1.3 adds optional provider
+A trusted Rust host may approve named absolute cache scopes using
+`WorkerManager::with_cache_scopes`. `prepare_cached` takes a known reservation,
+an unchanged worker plan and one declarative cache recipe. No scopes are approved
+by default. Persistent-worker lifecycle operations are not exported on the bus.
+Contract 1.3 adds optional provider
 preparation capability vocabulary and per-command deadlines. Contract 1.4 adds
 the host-facing `PrepareEnvironment` bridge through the configured router.
 Unchanged providers remain compatible at 1.0.

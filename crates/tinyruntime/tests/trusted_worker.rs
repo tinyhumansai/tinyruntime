@@ -18,7 +18,7 @@ async fn trusted_host_dispatches_real_jsonl_and_cleanup() {
             .to_string_lossy()
             .into_owned(),
     }];
-    let workers = tinyruntime::WorkerManager::new(scratch.path().join("workers"))
+    let workers = tinyruntime::worker::WorkerManager::new(scratch.path().join("workers"))
         .with_cache_scopes(scopes)
         .unwrap();
     let handle: WorkerHandle = workers.reserve().await.unwrap();
@@ -92,7 +92,7 @@ async fn trusted_host_publishes_exact_marker_bytes() {
             .to_string_lossy()
             .into_owned(),
     }];
-    let workers = tinyruntime::WorkerManager::new(scratch.path().join("workers"))
+    let workers = tinyruntime::worker::WorkerManager::new(scratch.path().join("workers"))
         .with_cache_scopes(scopes)
         .unwrap();
     let handle: WorkerHandle = workers.reserve().await.unwrap();

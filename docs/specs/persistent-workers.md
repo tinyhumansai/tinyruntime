@@ -5,6 +5,11 @@ package knowledge, or model algorithms. Python providers describe interpreter an
 virtual-environment recipes; TinyJuice describes its compressor script/model
 recipe. Those integrations are separate slices. The first slice implements real
 reserve, prepare, start, request, status, stop and terminal shutdown operations.
+These operations are available only through the trusted Rust `WorkerManager` API.
+The public Runtime bus interface does not export worker lifecycle members: the
+current TinyBus service API supplies no authenticated caller context. An ordinary
+bus peer cannot submit native plans, reserve/control workers, or shut down the
+manager. A future bus adapter must establish caller authorization before dispatch.
 It does not switch hosts or publish a release artifact.
 
 Each caller first reserves an opaque process-local handle. Only idle reservations
@@ -52,7 +57,5 @@ and the prepared executable without executing them. Each command can carry an
 optional deadline. Four hours bounds a whole cache recipe and thirty minutes
 bounds each individual command.
 
-`WorkerReserve` and `WorkerStatus` encode manager errors in bus names
-`ai.tinyhumans.runtime.Error.Worker.<Classification>` (for example `Busy`,
-`Closed` or `Unknown`), with the bounded machine reason as the error message.
+Rust `reserve` and `status` return structured `WorkerOutcome` errors.
 Hosts can distinguish retryable admission from terminal shutdown or foreign IDs.
