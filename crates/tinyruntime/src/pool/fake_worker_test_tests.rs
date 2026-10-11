@@ -243,3 +243,12 @@ fn serves_as_a_worker_when_asked() {
         "a plain test run must not be talking to a pool"
     );
 }
+
+#[test]
+fn fake_worker_launch_carries_the_allowlisted_process_environment() {
+    let launch = super::launch(tinyruntime_bus::Language::nodejs());
+    let bin = launch.binary.parent().expect("test executable has a directory");
+    for entry in crate::pool::env::build(bin, &[]) {
+        assert!(launch.env.contains(&entry), "missing process environment: {}", entry.0);
+    }
+}
