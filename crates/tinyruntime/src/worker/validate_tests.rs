@@ -2,9 +2,9 @@
 use super::*;
 
 #[test]
-fn invalid_command_vectors_and_plan_limits_are_rejected() {
+fn invalid_command_vectors_and_plan_limits_are_rejected() -> std::io::Result<()> {
     let mut command = WorkerCommand {
-        executable: "/explicit-runtime".into(),
+        executable: std::env::current_exe()?.to_string_lossy().into_owned(),
         args: vec!["x".repeat(65537)],
         env: Vec::new(),
         timeout_ms: None,
@@ -44,12 +44,13 @@ fn invalid_command_vectors_and_plan_limits_are_rejected() {
     assert_eq!(super::plan(&plan), Err("plan_limit"));
     let mut count = Count(0);
     assert!(std::io::Write::flush(&mut count).is_ok());
+    Ok(())
 }
 
 #[test]
-fn step_deadlines_are_bounded_independently() {
+fn step_deadlines_are_bounded_independently() -> std::io::Result<()> {
     let mut command = WorkerCommand {
-        executable: "/explicit-runtime".into(),
+        executable: std::env::current_exe()?.to_string_lossy().into_owned(),
         args: Vec::new(),
         env: Vec::new(),
         timeout_ms: Some(1),
@@ -59,6 +60,7 @@ fn step_deadlines_are_bounded_independently() {
     assert_eq!(super::command(&command), Err("command_limit"));
     command.timeout_ms = Some(30 * 60 * 1000 + 1);
     assert_eq!(super::command(&command), Err("command_limit"));
+    Ok(())
 }
 
 #[test]

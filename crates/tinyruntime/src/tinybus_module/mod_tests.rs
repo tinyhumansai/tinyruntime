@@ -593,7 +593,12 @@ async fn a_host_runs_code_through_the_router_over_the_bus() -> TinyBusResult<()>
         crate::pool::fake_worker::Directive::Echo("over-the-bus").code(),
     );
 
-    let reply: ExecResponse = proxy.call(names::methods::EXECUTE, (request,)).await?;
+    let reply: ExecResponse = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        proxy.call(names::methods::EXECUTE, (request,)),
+    )
+    .await
+    .expect("the router must complete the worker request within 60 seconds")?;
     assert_eq!(reply.stdout, "over-the-bus");
     assert!(reply.success());
     assert_eq!(reply.runtime_version, "1.2.3");
@@ -603,6 +608,11 @@ async fn a_host_runs_code_through_the_router_over_the_bus() -> TinyBusResult<()>
         proxy.call(names::methods::POOL_STATS, ()).await?;
     assert_eq!(pools.pools.len(), 1);
     assert_eq!(pools.pools[0].jobs_total, 1);
+    // The service owns an Engine whose bus providers retain this Connection.
+    // Unexport it to break that cycle and drop its warm workers before runtime
+    // shutdown. Windows pipe drains use blocking reads that otherwise keep
+    // Tokio's blocking pool alive after the test has returned.
+    assert!(module.unserve(&names::OBJECT_PATH.try_into()?).await);
     Ok(())
 }
 

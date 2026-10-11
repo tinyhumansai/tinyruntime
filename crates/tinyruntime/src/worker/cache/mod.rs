@@ -1,6 +1,7 @@
 //! Persistent recipe ownership: scoped handles, cross-process lock and owned staging.
 mod filesystem;
 mod identity;
+mod staging;
 mod validate;
 
 use cap_fs_ext::{FollowSymlinks, MetadataExt, OpenOptionsFollowExt, OpenOptionsSyncExt};
@@ -43,13 +44,18 @@ pub(super) struct Session {
     lock: Option<File>,
     lock_identity: (u64, u64),
     recipe_identity: CacheArtifact,
-    staging: Option<Dir>,
+    staging: Option<staging::Staging>,
     staged: Vec<String>,
     pub(super) cached: bool,
     pub(super) legacy: bool,
 }
 
 impl Session {
+    /// Borrow the retained capability for child-side cwd binding.
+    pub(super) fn directory(&self) -> &Dir {
+        &self.root
+    }
+
     pub(super) async fn acquire(
         path: &Path,
         recipe: &CacheRecipe,
@@ -84,7 +90,9 @@ impl Session {
             }
             match lock.try_lock_exclusive() {
                 Ok(()) => break,
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                Err(error)
+                    if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() =>
+                {
                     tokio::select! {
                         biased;
                         () = super::native::canceled(stop) => return Err("canceled"),
@@ -169,12 +177,12 @@ impl Session {
         self.root
             .create_dir(&name)
             .map_err(|_| "cache_stage_failed")?;
-        self.staging = Some(
-            self.root
-                .open_dir_nofollow(&name)
-                .map_err(|_| "cache_stage_failed")?,
-        );
-        let stage = self.staging.as_ref().ok_or("cache_stage_failed")?;
+        self.staging = Some(staging::Staging::open(&self.root, name)?);
+        let stage = self
+            .staging
+            .as_ref()
+            .ok_or("cache_stage_failed")?
+            .directory()?;
         for (index, artifact) in recipe.artifacts.iter().enumerate() {
             let name = format!("artifact-{index}");
             self.staged.push(name.clone());
@@ -197,20 +205,22 @@ impl Session {
         self.root
             .create_dir(&name)
             .map_err(|_| "cache_stage_failed")?;
-        self.staging = Some(
-            self.root
-                .open_dir_nofollow(&name)
-                .map_err(|_| "cache_stage_failed")?,
-        );
+        self.staging = Some(staging::Staging::open(&self.root, name)?);
         self.staged.push("identity".into());
         filesystem::stage(
-            self.staging.as_ref().ok_or("cache_stage_failed")?,
+            self.staging
+                .as_ref()
+                .ok_or("cache_stage_failed")?
+                .directory()?,
             "identity",
             &self.recipe_identity.bytes,
         )?;
         self.check_binding()?;
         filesystem::promote(
-            self.staging.as_ref().ok_or("cache_stage_failed")?,
+            self.staging
+                .as_ref()
+                .ok_or("cache_stage_failed")?
+                .directory()?,
             "identity",
             &self.root,
             &self.recipe_identity.path,
@@ -232,26 +242,18 @@ impl Session {
                 return Err("cache_artifact_changed");
             }
         }
-        let stage = self.staging.as_ref().ok_or("cache_stage_failed")?;
+        let stage = self
+            .staging
+            .as_ref()
+            .ok_or("cache_stage_failed")?
+            .directory()?;
         filesystem::promote(stage, "identity", &self.root, &self.recipe_identity.path)?;
         filesystem::promote(stage, "marker", &self.root, &recipe.marker.path)
     }
 
     pub(super) fn cleanup(&mut self) -> Result<(), &'static str> {
-        if let Some(stage) = &self.staging {
-            for name in &self.staged {
-                match stage.remove_file_or_symlink(name) {
-                    Ok(()) => {}
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(_) => return Err("cache_stage_cleanup_failed"),
-                }
-            }
-            // Remove only this opened directory, never recursively delete user data.
-            stage
-                .try_clone()
-                .map_err(|_| "cache_stage_cleanup_failed")?
-                .remove_open_dir()
-                .map_err(|_| "cache_stage_cleanup_failed")?;
+        if let Some(stage) = &mut self.staging {
+            stage.cleanup(&self.root, &self.staged)?;
         }
         self.staging = None;
         self.staged.clear();
@@ -266,8 +268,6 @@ enum Readiness {
     Legacy,
     Rebuild,
 }
-
-use cap_fs_ext::DirExt;
 
 #[cfg(test)]
 #[path = "mod_tests.rs"]

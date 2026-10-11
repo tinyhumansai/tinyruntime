@@ -8,8 +8,8 @@ use super::*;
 #[cfg(unix)]
 #[test]
 fn parent_symlink_replacement_cannot_redirect_router_publication() {
-    let root = tempfile::tempdir().unwrap();
-    let outside = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
+    let outside = crate::worker::test_tempdir().unwrap();
     let dir = absolute(&root.path().canonicalize().unwrap(), true).unwrap();
     std::fs::create_dir(root.path().join("target")).unwrap();
     let (pinned, _) = parent(&dir, "target/ready", false).unwrap();
@@ -27,7 +27,7 @@ fn parent_symlink_replacement_cannot_redirect_router_publication() {
 #[cfg(unix)]
 #[test]
 fn named_pipe_artifact_is_rejected_without_waiting_for_a_writer() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     assert!(
         std::process::Command::new("mkfifo")
             .arg(root.path().join("marker"))
@@ -45,7 +45,7 @@ fn named_pipe_artifact_is_rejected_without_waiting_for_a_writer() {
 
 #[test]
 fn bounded_regular_artifacts_and_required_entries_preserve_exact_bytes() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let dir = absolute(&root.path().canonicalize().unwrap(), true).unwrap();
     let artifact = CacheArtifact {
         path: "nested/file".into(),
@@ -108,8 +108,8 @@ fn bounded_regular_artifacts_and_required_entries_preserve_exact_bytes() {
 #[cfg(unix)]
 #[test]
 fn final_symlinks_and_hardlinks_are_never_read_or_overwritten_as_artifacts() {
-    let root = tempfile::tempdir().unwrap();
-    let outside = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
+    let outside = crate::worker::test_tempdir().unwrap();
     std::fs::write(outside.path().join("secret"), b"private").unwrap();
     std::os::unix::fs::symlink(outside.path().join("secret"), root.path().join("link")).unwrap();
     std::fs::hard_link(outside.path().join("secret"), root.path().join("hard")).unwrap();

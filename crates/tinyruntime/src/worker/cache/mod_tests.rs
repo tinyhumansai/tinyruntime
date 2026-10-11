@@ -7,15 +7,19 @@ use super::*;
 
 #[test]
 fn duplicate_and_overlapping_scope_admission_is_bounded() {
+    let scratch = crate::worker::test_tempdir().unwrap();
     let scope = WorkerCacheScope {
         id: "cache".into(),
-        root: "/tmp/cache".into(),
+        root: scratch.path().join("cache").to_string_lossy().into_owned(),
     };
     assert!(scopes(std::slice::from_ref(&scope)).is_ok());
     assert!(scopes(&[scope.clone(), scope.clone()]).is_err());
     let mut nested = scope.clone();
     nested.id = "nested".into();
-    nested.root.push_str("/child");
+    nested.root = Path::new(&scope.root)
+        .join("child")
+        .to_string_lossy()
+        .into_owned();
     assert!(scopes(&[scope.clone(), nested]).is_err());
     assert!(scopes(&vec![scope; 33]).is_err());
 }
@@ -37,7 +41,7 @@ fn recipe() -> CacheRecipe {
 
 #[tokio::test]
 async fn cache_lock_wait_observes_deadline_and_cancellation_without_stealing_lock() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let root = root.path().canonicalize().unwrap();
     let lock = std::fs::OpenOptions::new()
         .create(true)
@@ -87,8 +91,8 @@ async fn cache_lock_wait_observes_deadline_and_cancellation_without_stealing_loc
 #[cfg(unix)]
 #[tokio::test]
 async fn scope_and_lock_replacements_refuse_readiness_publication_without_outside_writes() {
-    let scratch = tempfile::tempdir().unwrap();
-    let outside = tempfile::tempdir().unwrap();
+    let scratch = crate::worker::test_tempdir().unwrap();
+    let outside = crate::worker::test_tempdir().unwrap();
     let root = scratch.path().canonicalize().unwrap().join("cache");
     let (_stop, mut receiver) = watch::channel(false);
     let mut session = Session::acquire(
@@ -126,7 +130,7 @@ async fn scope_and_lock_replacements_refuse_readiness_publication_without_outsid
 #[cfg(unix)]
 #[tokio::test]
 async fn unsafe_lock_file_and_missing_required_entries_are_not_cached_successes() {
-    let scratch = tempfile::tempdir().unwrap();
+    let scratch = crate::worker::test_tempdir().unwrap();
     let root = scratch.path().canonicalize().unwrap();
     let (_stop, mut receiver) = watch::channel(false);
     std::os::unix::fs::symlink(root.join("outside"), root.join(".tinyruntime-cache.lock")).unwrap();
@@ -162,4 +166,38 @@ async fn unsafe_lock_file_and_missing_required_entries_are_not_cached_successes(
     );
     session.cleanup().unwrap();
     assert!(!root.join("ready").exists());
+}
+
+#[tokio::test]
+async fn cleanup_removes_owned_staging_and_releases_the_cache_lock() {
+    let scratch = crate::worker::test_tempdir().unwrap();
+    let root = scratch.path().canonicalize().unwrap();
+    let (_stop, mut receiver) = watch::channel(false);
+    let mut session = Session::acquire(
+        &root,
+        &recipe(),
+        &mut receiver,
+        Instant::now() + Duration::from_secs(1),
+    )
+    .await
+    .unwrap();
+    session.install(&recipe()).unwrap();
+    session.publish(&recipe()).unwrap();
+    session.cleanup().unwrap();
+    assert!(std::fs::read_dir(&root).unwrap().all(|entry| {
+        !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".tinyruntime-stage-")
+    }));
+    let next = Session::acquire(
+        &root,
+        &recipe(),
+        &mut receiver,
+        Instant::now() + Duration::from_secs(1),
+    )
+    .await
+    .unwrap();
+    assert!(next.cached);
 }

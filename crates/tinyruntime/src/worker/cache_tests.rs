@@ -78,7 +78,7 @@ async fn wait_file(path: &std::path::Path) {
 #[cfg(unix)]
 #[tokio::test]
 async fn successful_cache_is_reused_after_manager_restart_without_native_commands() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let recipe = recipe(vec![step("printf 'run\\n' >> count; cat input > payload")]);
     let first = manager(root.path());
     let (handle, result) = prepare(&first, recipe.clone()).await;
@@ -102,7 +102,7 @@ async fn successful_cache_is_reused_after_manager_restart_without_native_command
 #[cfg(unix)]
 #[tokio::test]
 async fn partial_stale_and_changed_artifact_caches_are_reprovisioned_under_the_lock() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let cache = root.path().join("cache");
     std::fs::create_dir(&cache).unwrap();
     let recipe = recipe(vec![step("printf 'run\\n' >> count; cat input > payload")]);
@@ -135,7 +135,7 @@ async fn partial_stale_and_changed_artifact_caches_are_reprovisioned_under_the_l
 #[cfg(unix)]
 #[tokio::test]
 async fn parallel_managers_provision_one_cache_once_then_observe_the_same_marker() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let first = manager(root.path());
     let second = manager(root.path());
     let recipe = recipe(vec![step(
@@ -166,7 +166,7 @@ async fn parallel_managers_provision_one_cache_once_then_observe_the_same_marker
 #[cfg(unix)]
 #[tokio::test]
 async fn failed_recipe_preserves_partial_cache_and_allows_retries_beyond_capacity() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = manager(root.path());
     let failed = recipe(vec![step(
         "printf user > preserved; printf partial > payload; exit 1",
@@ -201,7 +201,7 @@ async fn failed_recipe_preserves_partial_cache_and_allows_retries_beyond_capacit
 #[cfg(target_os = "linux")]
 #[tokio::test]
 async fn abandoned_cache_reply_and_shutdown_reap_preparation_before_unlock_and_no_marker() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let first = manager(root.path());
     let pending = {
         let first = first.clone();
@@ -240,7 +240,7 @@ async fn abandoned_cache_reply_and_shutdown_reap_preparation_before_unlock_and_n
 #[cfg(unix)]
 #[tokio::test]
 async fn injected_user_staging_file_remains_owned_by_user_and_cleanup_is_publicly_retryable() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = manager(root.path());
     let (handle, result) = prepare(&manager, recipe(vec![step("for stage in .tinyruntime-stage-*; do printf user > \"$stage/user\"; done; cat input > payload")])).await;
     assert_eq!(result.kind, WorkerOutcomeKind::Failed);
@@ -266,7 +266,7 @@ async fn injected_user_staging_file_remains_owned_by_user_and_cleanup_is_publicl
 #[cfg(unix)]
 #[tokio::test]
 async fn changed_preparation_recipe_invalidates_readiness_without_changing_marker_bytes() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let first = manager(root.path());
     let (_, result) = prepare(
         &first,
@@ -296,7 +296,7 @@ async fn changed_preparation_recipe_invalidates_readiness_without_changing_marke
 #[cfg(unix)]
 #[tokio::test]
 async fn failed_changed_recipe_preserves_previous_identity_instead_of_becoming_legacy() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let first = manager(root.path());
     assert_eq!(
         prepare(&first, recipe(vec![step("cat input > payload")]))
@@ -343,7 +343,7 @@ fn remove_identity(cache: &std::path::Path) {
 #[cfg(unix)]
 #[tokio::test]
 async fn legacy_cache_adoption_is_default_denied_and_requires_exact_readiness() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let initial = manager(root.path());
     let (_, result) = prepare(
         &initial,
@@ -369,7 +369,7 @@ async fn legacy_cache_adoption_is_default_denied_and_requires_exact_readiness() 
 #[cfg(unix)]
 #[tokio::test]
 async fn explicitly_adopts_only_verified_legacy_cache_without_running_commands() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let initial = manager(root.path());
     let (_, result) = prepare(
         &initial,
@@ -400,7 +400,7 @@ async fn explicitly_adopts_only_verified_legacy_cache_without_running_commands()
 #[cfg(unix)]
 #[tokio::test]
 async fn explicit_legacy_policy_never_adopts_a_mismatched_existing_identity() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let initial = manager(root.path());
     let (_, result) = prepare(
         &initial,

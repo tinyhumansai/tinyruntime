@@ -1,0 +1,48 @@
+[package]
+name = "tinyruntime-process"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Descriptor-pinned child working directories for TinyRuntime"
+publish = false
+
+[target.'cfg(unix)'.dependencies]
+# fchdir is the portable, async-signal-safe directory change used after fork.
+rustix = { version = "1", features = ["process"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+# Mirror the complete workspace policy: Cargo cannot inherit and override a
+# single lint. Only unsafe_code differs (deny instead of forbid), allowing the
+# documented function-local pre_exec exception. test-process-lints.py pins this.
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Library code must not panic on its own; tests and examples may.
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+# Public fallible/panicking APIs must document their failure modes.
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+# Documentation hygiene.
+doc_markdown = "warn"
+# `#[must_use]` on pure public functions.
+must_use_candidate = "warn"
+
+[lints.rustdoc]
+broken_intra_doc_links = "warn"
+private_intra_doc_links = "warn"
+

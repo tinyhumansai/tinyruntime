@@ -1426,6 +1426,7 @@ dependencies = [
  "tinybus",
  "tinybus-module",
  "tinyruntime-bus",
+ "tinyruntime-process",
  "tokio",
  "tracing",
  "uuid",
@@ -1439,6 +1440,14 @@ version = "0.2.12"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "tinyruntime-process"
+version = "0.2.12"
+dependencies = [
+ "rustix",
+ "tempfile",
 ]
 
 [[package]]
