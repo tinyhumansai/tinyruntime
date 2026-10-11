@@ -259,12 +259,26 @@ impl Actor {
             use std::os::unix::fs::PermissionsExt;
             tokio::fs::set_permissions(&self.root, std::fs::Permissions::from_mode(0o700)).await?;
         }
-        let path = self.root.join("worker-script");
-        let mut options = tokio::fs::OpenOptions::new();
-        options.write(true).create(true);
+        use cap_fs_ext::{FollowSymlinks, MetadataExt, OpenOptionsFollowExt, OpenOptionsSyncExt};
+        let directory =
+            cap_std::fs::Dir::open_ambient_dir(&self.root, cap_std::ambient_authority())?;
+        let mut options = cap_std::fs::OpenOptions::new();
+        options
+            .write(true)
+            .create(true)
+            .follow(FollowSymlinks::No)
+            .nonblock(true);
         #[cfg(unix)]
-        options.mode(0o600);
-        let mut file = options.open(path).await?;
+        {
+            use cap_std::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let file = directory.open_with("worker-script", &options)?;
+        let metadata = file.metadata()?;
+        if !metadata.is_file() || metadata.nlink() != 1 {
+            return Err(std::io::ErrorKind::InvalidInput.into());
+        }
+        let mut file = tokio::fs::File::from_std(file.into_std());
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;

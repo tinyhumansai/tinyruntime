@@ -1023,17 +1023,43 @@ async fn preparation_rejects_linked_and_special_script_entries_without_outside_w
         match entry {
             "symlink" => std::os::unix::fs::symlink(&target, &script).unwrap(),
             "hardlink" => std::fs::hard_link(&target, &script).unwrap(),
-            "fifo" => assert!(std::process::Command::new("mkfifo").arg(&script).status().unwrap().success()),
+            "fifo" => assert!(
+                std::process::Command::new("mkfifo")
+                    .arg(&script)
+                    .status()
+                    .unwrap()
+                    .success()
+            ),
             _ => std::fs::create_dir(&script).unwrap(),
         }
         let prepared = tokio::time::timeout(
             std::time::Duration::from_secs(5),
-            manager.prepare(WorkerPrepare { handle, plan: plan(HEALTHY) }),
-        ).await.unwrap();
+            manager.prepare(WorkerPrepare {
+                handle,
+                plan: plan(HEALTHY),
+            }),
+        )
+        .await
+        .unwrap();
         assert_eq!(prepared.kind, WorkerOutcomeKind::Failed, "{entry}");
         assert_eq!(prepared.reason, Some("install_failed".into()), "{entry}");
-        assert_eq!(std::fs::read_to_string(&target).unwrap(), "outside content", "{entry}");
-        assert_eq!(std::fs::metadata(&target).unwrap().permissions().mode() & 0o777, 0o640, "{entry}");
-        assert_eq!(tokio::time::timeout(std::time::Duration::from_secs(5), manager.shutdown()).await.unwrap().kind, WorkerOutcomeKind::Complete, "{entry}");
+        assert_eq!(
+            std::fs::read_to_string(&target).unwrap(),
+            "outside content",
+            "{entry}"
+        );
+        assert_eq!(
+            std::fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+            0o640,
+            "{entry}"
+        );
+        assert_eq!(
+            tokio::time::timeout(std::time::Duration::from_secs(5), manager.shutdown())
+                .await
+                .unwrap()
+                .kind,
+            WorkerOutcomeKind::Complete,
+            "{entry}"
+        );
     }
 }

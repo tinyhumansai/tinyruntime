@@ -5,7 +5,9 @@ The public Runtime bus interface exports no worker lifecycle methods because
 TinyBus service dispatch does not provide authenticated caller identity. Hosts
 must authorize any external caller before invoking this native Rust capability. It installs bounded
 script bytes under its private cache directory and executes only the explicit
-commands in the plan. It owns native process groups (Unix) or jobs (Windows),
+commands in the plan. Existing script entries are opened without following links
+and without blocking on special files; only single-link regular files can be
+changed or written. It owns native process groups (Unix) or jobs (Windows),
 stdio framing and cleanup. Language providers and application recipes decide
 what those bytes mean; this module contains no interpreter/package/model logic.
 
