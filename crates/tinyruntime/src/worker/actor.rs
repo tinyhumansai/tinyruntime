@@ -94,10 +94,21 @@ impl Actor {
                 WorkerPhase::Failed
             };
         });
+        let mut supervision = tokio::time::interval(Duration::from_millis(100));
+        supervision.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             let command = tokio::select! {
                 biased;
                 () = native::canceled(&mut self.stop) => break,
+                _ = supervision.tick() => {
+                    let unusable = self.process.as_mut().is_some_and(|process| !process.is_alive());
+                    let failed_preparation = prepared.kind != WorkerOutcomeKind::Complete
+                        && (self.preparation.is_some() || self.cache.is_some());
+                    if unusable || failed_preparation {
+                        let _ = self.cleanup().await;
+                    }
+                    continue;
+                },
                 command = commands.recv() => match command { Some(command) => command, None => break },
             };
             match command {
@@ -119,6 +130,10 @@ impl Actor {
                     let _ = reply.send(self.start().await);
                 }
                 Command::Request(request, deadline, reply) => {
+                    // Caller cancellation before dequeue owns no native side effects.
+                    if reply.is_closed() {
+                        continue;
+                    }
                     let _ = reply.send(self.request(request, deadline).await);
                 }
             }
@@ -245,6 +260,13 @@ impl Actor {
     }
 
     async fn cleanup(&mut self) -> Result<(), &'static str> {
+        self.state.send_modify(|s| {
+            s.status.phase = WorkerPhase::Prepared;
+            s.status.server.running = false;
+            for backend in &mut s.status.server.backends {
+                backend.ready = false;
+            }
+        });
         if let Some(process) = &mut self.preparation {
             process.cleanup().await?;
         }
@@ -291,8 +313,13 @@ impl Actor {
         if idle && self.cleanup().await.is_err() {
             return outcome(WorkerOutcomeKind::Failed, Some("cleanup_failed"));
         }
-        if self.process.is_some() {
-            return outcome(WorkerOutcomeKind::Complete, None);
+        if let Some(process) = &mut self.process {
+            if self.state.borrow().status.server.running && process.is_alive() {
+                return outcome(WorkerOutcomeKind::Complete, None);
+            }
+            if self.cleanup().await.is_err() {
+                return outcome(WorkerOutcomeKind::Failed, Some("cleanup_failed"));
+            }
         }
         if self.retry_after.is_some_and(|after| Instant::now() < after) {
             return outcome(WorkerOutcomeKind::Failed, Some("startup_backoff"));
@@ -363,6 +390,9 @@ impl Actor {
     }
 
     async fn request(&mut self, request: WorkerRequest, deadline: Instant) -> WorkerOutcome {
+        if Instant::now() >= deadline {
+            return outcome(WorkerOutcomeKind::Failed, Some("request_timeout"));
+        }
         if let Some((previous, result)) = self.replies.get(&request.operation) {
             return if previous.method == request.method && previous.params == request.params {
                 result.clone()

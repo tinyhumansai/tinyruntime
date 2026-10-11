@@ -256,6 +256,20 @@ async fn canceled_prepare_waiter_and_shutdown_wait_for_preparation_native_cleanu
 #[cfg(all(unix, target_os = "linux"))]
 #[tokio::test]
 async fn stop_kills_worker_descendants_before_reply() {
+    // Isolate this process-global setting from the rest of the parallel suite.
+    if std::env::var_os("TINYRUNTIME_SUBREAPER_FIXTURE").is_none() {
+        let result = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "worker::tests::stop_kills_worker_descendants_before_reply",
+                "--exact",
+                "--nocapture",
+            ])
+            .env("TINYRUNTIME_SUBREAPER_FIXTURE", "1")
+            .status()
+            .unwrap();
+        assert!(result.success());
+        return;
+    }
     nix::sys::prctl::set_child_subreaper(true).unwrap();
     let root = tempfile::tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
@@ -848,12 +862,34 @@ async fn queued_expiry_does_not_poison_a_same_operation_retry() {
     let root = tempfile::tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
-    manager.prepare(WorkerPrepare {handle: handle.clone(), plan: plan(HEALTHY)}).await;
-    let request = WorkerRequest {handle: handle.clone(), operation: 1, method: "alpha.run".into(), params: serde_json::Value::Null};
+    manager
+        .prepare(WorkerPrepare {
+            handle: handle.clone(),
+            plan: plan(HEALTHY),
+        })
+        .await;
+    let request = WorkerRequest {
+        handle: handle.clone(),
+        operation: 1,
+        method: "alpha.run".into(),
+        params: serde_json::Value::Null,
+    };
     let (reply, response) = oneshot::channel();
-    manager.book.lock().await.slots[&handle].commands.as_ref().unwrap().send(Command::Request(request.clone(), Instant::now(), reply)).await.unwrap();
-    assert_eq!(response.await.unwrap().reason.as_deref(), Some("request_timeout"));
-    assert_eq!(manager.request(request).await.kind, WorkerOutcomeKind::Response);
+    manager.book.lock().await.slots[&handle]
+        .commands
+        .as_ref()
+        .unwrap()
+        .send(Command::Request(request.clone(), Instant::now(), reply))
+        .await
+        .unwrap();
+    assert_eq!(
+        response.await.unwrap().reason.as_deref(),
+        Some("request_timeout")
+    );
+    assert_eq!(
+        manager.request(request).await.kind,
+        WorkerOutcomeKind::Response
+    );
     manager.shutdown().await;
 }
 
@@ -864,16 +900,34 @@ async fn exited_worker_is_detected_without_a_request() {
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     let exit = root.path().join("exit");
-    let mut launch = plan("printf '%s\\n' '{\"ready\":true,\"protocol\":1}'; while [ ! -f \"$EXIT\" ]; do sleep 0.01; done");
-    launch.command.env.push(("EXIT".into(), exit.display().to_string()));
-    manager.prepare(WorkerPrepare {handle: handle.clone(), plan: launch}).await;
-    assert_eq!(manager.start(&handle).await.kind, WorkerOutcomeKind::Complete);
+    let mut launch = plan(
+        "printf '%s\\n' '{\"ready\":true,\"protocol\":1}'; while [ ! -f \"$EXIT\" ]; do sleep 0.01; done",
+    );
+    launch
+        .command
+        .env
+        .push(("EXIT".into(), exit.display().to_string()));
+    manager
+        .prepare(WorkerPrepare {
+            handle: handle.clone(),
+            plan: launch,
+        })
+        .await;
+    assert_eq!(
+        manager.start(&handle).await.kind,
+        WorkerOutcomeKind::Complete
+    );
     std::fs::write(exit, "exit").unwrap();
     tokio::time::timeout(Duration::from_secs(2), async {
         while manager.status(&handle).await.unwrap().server.running {
             tokio::task::yield_now().await;
         }
-    }).await.unwrap();
-    assert_eq!(manager.status(&handle).await.unwrap().phase, WorkerPhase::Prepared);
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        manager.status(&handle).await.unwrap().phase,
+        WorkerPhase::Prepared
+    );
     manager.shutdown().await;
 }

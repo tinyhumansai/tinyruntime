@@ -176,6 +176,14 @@ pub(super) struct Process {
 }
 
 impl Process {
+    pub(super) fn is_alive(&mut self) -> bool {
+        self.reaping.is_none()
+            && self
+                .child
+                .as_mut()
+                .is_some_and(|child| matches!(child.inner().try_wait(), Ok(None)))
+    }
+
     pub(super) fn spawn(
         plan: &WorkerCommand,
         root: &Path,
