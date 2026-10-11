@@ -3,6 +3,26 @@
 //! Unix descriptor namespaces are not interchangeable: Darwin's `/dev/fd`
 //! cannot stand in for Linux's `/proc/self/fd` directory traversal. Bind the
 //! child directly with `fchdir` before exec, without changing the parent cwd.
+//!
+//! `current_dir` is the Unix entry point. This crate holds only descriptor
+//! binding; worker protocols, process pools, and bus routing belong in the
+//! runtime crate so this unsafe boundary stays small and independently tested.
+//!
+//! ```
+//! # fn main() -> std::io::Result<()> {
+//! # #[cfg(unix)] {
+//! use std::fs::File;
+//! use std::process::Command;
+//!
+//! let directory = File::open(std::env::current_dir()?)?;
+//! let mut command = Command::new("/bin/sh");
+//! command.args(["-c", "pwd"]);
+//! tinyruntime_process::current_dir(&mut command, &directory)?;
+//! assert!(command.output()?.status.success());
+//! # }
+//! # Ok(())
+//! # }
+//! ```
 
 /// Pin a Unix command's working directory to an owned clone of a directory fd.
 ///
