@@ -82,6 +82,9 @@ jobs:
             exit 1
           fi
 
+      - name: Audit independent default/all contract closures
+        run: python3 scripts/check-bus-purity.py
+
       - name: Require 90% line coverage in every source file
         run: .github/scripts/check-file-coverage.sh 90 coverage.json
 

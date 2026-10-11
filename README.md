@@ -30,10 +30,12 @@ downloads archives, checks digests, unpacks them, promotes them into a cache
 atomically, finds them again on the next start, and keeps warm workers in front
 of them.
 
-**A provider module knows one language.** It answers five questions — what it
-is, whether the host already has a usable toolchain, which archive to install
-for this machine, where the binaries are once unpacked, and what a warm worker
-looks like — and it downloads nothing and installs nothing.
+**A provider module knows one language.** It answers five required questions —
+what it is, whether the host already has a usable toolchain, which archive to
+install for this machine, where the binaries are once unpacked, and what a warm
+worker looks like — and it downloads nothing and installs nothing. A provider
+may advertise optional declarative setup operations; the router calls them only
+after capability negotiation.
 
 Adding a language therefore costs a release index and a path convention, not a
 fourth copy of a download pipeline with its own bugs.

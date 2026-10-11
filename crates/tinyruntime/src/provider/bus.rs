@@ -13,8 +13,9 @@
 use tinybus::Connection;
 
 use tinyruntime_bus::{
-    Distribution, Language, LayoutRequest, LayoutResponse, ProviderDescriptor, RuntimeLayout,
-    RuntimeSettings, WorkerHarness, names,
+    Distribution, EnvironmentPreparationPlan, EnvironmentPreparationRequest, Language,
+    LayoutRequest, LayoutResponse, ProviderDescriptor, RuntimeLayout, RuntimeSettings,
+    WorkerHarness, names,
 };
 
 use super::Provider;
@@ -132,6 +133,18 @@ impl Provider for BusProvider {
 
     async fn harness(&self) -> Result<WorkerHarness> {
         self.call(names::provider_methods::HARNESS, ()).await
+    }
+
+    async fn prepare_environment(
+        &self,
+        request: &EnvironmentPreparationRequest,
+    ) -> Result<Option<EnvironmentPreparationPlan>> {
+        self.call(
+            names::optional_provider_methods::PREPARE_ENVIRONMENT,
+            (request,),
+        )
+        .await
+        .map(Some)
     }
 }
 

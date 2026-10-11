@@ -13,7 +13,8 @@ use std::time::Duration;
 use reqwest::Client;
 
 use tinyruntime_bus::{
-    ExecRequest, ExecResponse, Language, PoolStats, ResolveRequest, ResolvedRuntime,
+    EnvironmentPreparationPlan, EnvironmentPreparationRequest, ExecRequest, ExecResponse, Language,
+    PoolStats, ResolveRequest, ResolvedRuntime,
 };
 
 use crate::error::{Error, Result};
@@ -63,6 +64,19 @@ impl Engine {
     /// Every live pool's counters.
     pub async fn pool_stats(&self) -> Vec<PoolStats> {
         self.pools.stats().await
+    }
+
+    /// Ask the configured provider for an optional declarative environment plan.
+    ///
+    /// # Errors
+    ///
+    /// Returns the registry's language lookup or provider errors.
+    pub async fn prepare_environment(
+        &self,
+        language: &Language,
+        request: &EnvironmentPreparationRequest,
+    ) -> Result<Option<EnvironmentPreparationPlan>> {
+        self.registry().prepare_environment(language, request).await
     }
 
     /// Resolve a runtime and run `request` on it.

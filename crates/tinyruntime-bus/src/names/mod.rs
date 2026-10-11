@@ -74,6 +74,9 @@ pub mod methods {
     ///
     /// Returns a [`crate::PoolStatsResponse`].
     pub const POOL_STATS: &str = "PoolStats";
+
+    /// Describes an optional environment recipe through the configured provider.
+    pub const PREPARE_ENVIRONMENT: &str = "PrepareEnvironment";
 }
 
 /// One constant per member of [`PROVIDER_INTERFACE`].
@@ -107,6 +110,13 @@ pub mod provider_methods {
     pub const HARNESS: &str = "Harness";
 }
 
+/// Optional provider members. A router calls these only when the provider's
+/// descriptor advertises the matching [`crate::ProviderCapability`].
+pub mod optional_provider_methods {
+    /// Describes native environment setup for an advertised preparation capability.
+    pub const PREPARE_ENVIRONMENT: &str = "PrepareEnvironment";
+}
+
 /// The well-known bus names the first-party providers claim.
 ///
 /// A router is not limited to these — its module configuration maps any language
@@ -135,6 +145,7 @@ pub const METHODS: &[&str] = &[
     methods::RESOLVE,
     methods::EXECUTE,
     methods::POOL_STATS,
+    methods::PREPARE_ENVIRONMENT,
 ];
 
 /// Every member of [`PROVIDER_INTERFACE`], in dispatch order.
@@ -147,6 +158,9 @@ pub const PROVIDER_METHODS: &[&str] = &[
     provider_methods::LAYOUT,
     provider_methods::HARNESS,
 ];
+
+/// Optional members that a provider may implement when it advertises them.
+pub const OPTIONAL_PROVIDER_METHODS: &[&str] = &[optional_provider_methods::PREPARE_ENVIRONMENT];
 
 #[cfg(test)]
 #[path = "mod_tests.rs"]

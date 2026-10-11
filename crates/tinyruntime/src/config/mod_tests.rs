@@ -71,6 +71,7 @@ fn a_host_can_route_a_language_this_build_never_heard_of() {
 fn an_explicit_harness_directory_is_honoured() {
     let config = ModuleConfig {
         harness_dir: "/var/lib/tinyruntime".to_string(),
+        worker_cache_scopes: Vec::new(),
         ..ModuleConfig::default()
     };
     assert_eq!(
