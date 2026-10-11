@@ -19,7 +19,8 @@ pub fn current_dir(
     directory: impl std::os::fd::AsFd,
 ) -> std::io::Result<()> {
     use std::os::unix::process::CommandExt;
-    let directory = directory.as_fd().try_clone_to_owned()?;
+    // Keep the clone above stdio: spawn may replace descriptors 0, 1 and 2.
+    let directory = rustix::io::fcntl_dupfd_cloexec(directory, 3)?;
     // SAFETY: The closure owns its descriptor, so it cannot be closed/reused
     // before spawn. After fork it performs only the async-signal-safe fchdir
     // syscall and constructs an errno-backed io::Error (no allocation, locks,
