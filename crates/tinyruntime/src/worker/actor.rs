@@ -67,7 +67,7 @@ pub(super) async fn run(
     loop {
         actor.stop.borrow_and_update();
         if actor.cleanup().await.is_ok() {
-            match tokio::fs::remove_dir_all(&actor.root).await {
+            match actor.remove_directory() {
                 Ok(()) => break,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
                 Err(_) => {}
@@ -86,6 +86,16 @@ pub(super) async fn run(
 }
 
 impl Actor {
+    // Cleanup follows the retained capability even after its ambient path changes.
+    // A clone keeps ownership available for retries if removal fails.
+    fn remove_directory(&self) -> std::io::Result<()> {
+        match &self.directory {
+            Some(directory) => directory.try_clone()?.remove_open_dir_all(),
+            // Preparation never acquired this directory, so nothing is ours to remove.
+            None => Ok(()),
+        }
+    }
+
     async fn serve(&mut self, commands: &mut mpsc::Receiver<Command>) {
         let prepared = self.prepare().await;
         self.state.send_modify(|s| {

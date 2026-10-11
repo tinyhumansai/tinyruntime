@@ -934,7 +934,7 @@ async fn exited_worker_is_detected_without_a_request() {
 
 #[cfg(unix)]
 #[tokio::test]
-async fn directory_cleanup_retries_without_another_stop_signal() {
+async fn directory_cleanup_preserves_an_ambient_file_replacement() {
     let root = tempfile::tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
@@ -945,21 +945,15 @@ async fn directory_cleanup_retries_without_another_stop_signal() {
         })
         .await;
     let directory = root.path().join(handle.0.replace(':', "_"));
-    std::fs::rename(&directory, root.path().join("held-directory")).unwrap();
-    std::fs::write(&directory, b"temporary obstruction").unwrap();
-    let state = manager.book.lock().await.slots[&handle].state.subscribe();
+    let held = root.path().join("held-directory");
+    std::fs::rename(&directory, &held).unwrap();
+    std::fs::write(&directory, b"unowned replacement").unwrap();
     assert_eq!(
-        manager.stop(&handle).await.reason.as_deref(),
-        Some("cleanup_failed")
+        manager.stop(&handle).await.kind,
+        WorkerOutcomeKind::Complete
     );
-    std::fs::remove_file(directory).unwrap();
-    tokio::time::timeout(Duration::from_secs(1), async {
-        while !state.borrow().closed {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .unwrap();
+    assert_eq!(std::fs::read(&directory).unwrap(), b"unowned replacement");
+    assert!(!held.exists());
     assert_eq!(manager.shutdown().await.kind, WorkerOutcomeKind::Complete);
 }
 
@@ -1190,9 +1184,16 @@ async fn shutdown_removes_the_pinned_directory_and_preserves_replacements() {
         let outside = tempfile::tempdir().unwrap();
         let manager = WorkerManager::new(root.path().to_path_buf());
         let handle = manager.reserve().await.unwrap();
-        assert_eq!(manager.prepare(WorkerPrepare {
-            handle: handle.clone(), plan: plan(HEALTHY),
-        }).await.kind, WorkerOutcomeKind::Complete);
+        assert_eq!(
+            manager
+                .prepare(WorkerPrepare {
+                    handle: handle.clone(),
+                    plan: plan(HEALTHY),
+                })
+                .await
+                .kind,
+            WorkerOutcomeKind::Complete
+        );
         let path = root.path().join(handle.0.replace(':', "_"));
         let held = root.path().join("held-directory");
         std::fs::rename(&path, &held).unwrap();
@@ -1206,7 +1207,10 @@ async fn shutdown_removes_the_pinned_directory_and_preserves_replacements() {
         std::fs::write(replacement.join("keep"), b"unowned").unwrap();
         assert_eq!(manager.shutdown().await.kind, WorkerOutcomeKind::Complete);
         assert_eq!(std::fs::read(replacement.join("keep")).unwrap(), b"unowned");
-        assert!(!held.exists(), "the renamed worker directory must be removed");
+        assert!(
+            !held.exists(),
+            "the renamed worker directory must be removed"
+        );
         assert!(std::fs::symlink_metadata(&path).is_ok());
     }
 }

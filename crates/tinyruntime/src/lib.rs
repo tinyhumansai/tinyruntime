@@ -108,12 +108,13 @@ pub use resolve::Resolver;
 // than two, and the payload types it names here are the very types the module
 // serves rather than copies of them.
 pub use tinyruntime_bus::{
-    ArchiveFormat, CONTRACT_VERSION, Distribution, ExecRequest, ExecResponse, INTERFACE, Language,
-    LanguageStatus, LanguagesResponse, LayoutRequest, LayoutResponse, METHODS, NODEJS, OBJECT_PATH,
-    PROVIDER_INTERFACE, PROVIDER_METHODS, PYTHON, PoolSettings, PoolStats, PoolStatsResponse,
-    ProviderDescriptor, ResolveRequest, ResolveResponse, ResolvedRuntime, RuntimeLayout,
-    RuntimeSettings, RuntimeSource, WORKER_PROTOCOL_VERSION, WorkerHarness, is_compatible, names,
-    object_path_for,
+    ArchiveFormat, CONTRACT_VERSION, Distribution, EnvironmentPreparationPlan,
+    EnvironmentPreparationRequest, ExecRequest, ExecResponse, INTERFACE, Language, LanguageStatus,
+    LanguagesResponse, LayoutRequest, LayoutResponse, METHODS, NODEJS, OBJECT_PATH,
+    PROVIDER_INTERFACE, PROVIDER_METHODS, PYTHON, PackageGroup, PoolSettings, PoolStats,
+    PoolStatsResponse, PrepareEnvironmentRequest, ProviderCapability, ProviderDescriptor,
+    ResolveRequest, ResolveResponse, ResolvedRuntime, RuntimeLayout, RuntimeSettings,
+    RuntimeSource, WORKER_PROTOCOL_VERSION, WorkerHarness, is_compatible, names, object_path_for,
 };
 
 /// Module-owned persistent JSONL workers.

@@ -21,7 +21,10 @@ opening reject symlinks component by component, and permissions are changed thro
 the opened directory. On Unix the supervisor retains that directory descriptor:
 preparation and startup use its descriptor path as the working directory, and the
 worker script argument is relative to that pinned directory. Replacing the ambient
-worker path cannot redirect script installation or Unix worker startup.
+worker path cannot redirect script installation or Unix worker startup. Shutdown
+removes the retained directory and its contents through that capability, including
+a renamed directory, and leaves replacement ambient entries untouched. If
+preparation never acquires a directory, cleanup does not remove its ambient path.
 Start begins only once
 the caller knows its handle. Commands inherit only the existing safe environment
 allowlist plus explicit recipe environment. No implicit interpreter fallback.
