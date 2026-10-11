@@ -1442,6 +1442,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tinyruntime-process"
+version = "0.2.12"
+dependencies = [
+ "rustix",
+ "tempfile",
+]
+
+[[package]]
 name = "tinyruntime-pyserver"
 version = "0.2.12"
 dependencies = [

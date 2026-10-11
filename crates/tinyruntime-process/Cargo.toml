@@ -1,0 +1,25 @@
+[package]
+name = "tinyruntime-process"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Descriptor-pinned child working directories for TinyRuntime"
+publish = false
+
+[target.'cfg(unix)'.dependencies]
+# fchdir is the portable, async-signal-safe directory change used after fork.
+rustix = { version = "1", features = ["process"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+# Only this boundary permits a documented pre_exec registration; the runtime
+# and every other member retain the workspace prohibition on unsafe code.
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
