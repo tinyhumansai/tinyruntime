@@ -1181,3 +1181,32 @@ async fn startup_uses_the_prepared_directory_after_path_replacement() {
     assert!(!outside.path().join("attacked").exists());
     manager.shutdown().await;
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn shutdown_removes_the_pinned_directory_and_preserves_replacements() {
+    for linked in [false, true] {
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let manager = WorkerManager::new(root.path().to_path_buf());
+        let handle = manager.reserve().await.unwrap();
+        assert_eq!(manager.prepare(WorkerPrepare {
+            handle: handle.clone(), plan: plan(HEALTHY),
+        }).await.kind, WorkerOutcomeKind::Complete);
+        let path = root.path().join(handle.0.replace(':', "_"));
+        let held = root.path().join("held-directory");
+        std::fs::rename(&path, &held).unwrap();
+        let replacement = if linked {
+            std::os::unix::fs::symlink(outside.path(), &path).unwrap();
+            outside.path().to_path_buf()
+        } else {
+            std::fs::create_dir(&path).unwrap();
+            path.clone()
+        };
+        std::fs::write(replacement.join("keep"), b"unowned").unwrap();
+        assert_eq!(manager.shutdown().await.kind, WorkerOutcomeKind::Complete);
+        assert_eq!(std::fs::read(replacement.join("keep")).unwrap(), b"unowned");
+        assert!(!held.exists(), "the renamed worker directory must be removed");
+        assert!(std::fs::symlink_metadata(&path).is_ok());
+    }
+}

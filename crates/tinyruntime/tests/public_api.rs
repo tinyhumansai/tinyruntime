@@ -93,3 +93,16 @@ fn linked_entry_points_are_available_to_a_host() {
     let manifest = tinyruntime::linked::tinybus_module_manifest_v1();
     assert!(manifest.len > 0);
 }
+
+#[test]
+fn environment_bridge_payloads_are_the_contract_types_at_the_crate_root() {
+    let request = tinyruntime::EnvironmentPreparationRequest::new("/runtime", "/environment")
+        .with_package_group(tinyruntime::PackageGroup::new(["package"]));
+    let _: tinyruntime_bus::EnvironmentPreparationRequest = request;
+    let _: Option<tinyruntime::EnvironmentPreparationPlan> =
+        None::<tinyruntime_bus::EnvironmentPreparationPlan>;
+    let _: Option<tinyruntime::PrepareEnvironmentRequest> =
+        None::<tinyruntime_bus::PrepareEnvironmentRequest>;
+    let capability = tinyruntime::ProviderCapability::PrepareEnvironment;
+    let _: tinyruntime_bus::ProviderCapability = capability;
+}
