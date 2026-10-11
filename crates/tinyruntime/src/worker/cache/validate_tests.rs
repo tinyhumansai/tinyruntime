@@ -167,3 +167,23 @@ fn credential_pairs_and_case_aliases_are_rejected() {
         );
     }
 }
+
+#[cfg(windows)]
+#[test]
+fn windows_scopes_refuse_system_directories_and_case_aliases() {
+    for root in [
+        r"C:\Windows\System32",
+        r"C:\WINDOWS\Temp",
+        r"C:\Program Files\app",
+        r"C:\Program Files (x86)\app",
+        r"C:\ProgramData\app",
+    ] {
+        assert!(
+            scope(&WorkerCacheScope {
+                id: "approved".into(),
+                root: root.into()
+            })
+            .is_err()
+        );
+    }
+}

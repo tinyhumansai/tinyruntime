@@ -107,6 +107,10 @@ struct Book {
 }
 
 /// One process-cached manager; admission counts live slots, not lifetime IDs.
+///
+/// Possession grants native worker control to trusted host code in this process.
+/// This Rust API does not isolate plugins in the same address space; hosts must
+/// enforce caller authorization at any boundary exposed to untrusted clients.
 #[derive(Debug, Clone)]
 pub struct WorkerManager {
     book: Arc<Mutex<Book>>,

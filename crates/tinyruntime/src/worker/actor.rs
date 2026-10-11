@@ -261,7 +261,15 @@ impl Actor {
 
     async fn cleanup(&mut self) -> Result<(), &'static str> {
         self.state.send_modify(|s| {
-            s.status.phase = WorkerPhase::Prepared;
+            s.status.phase = if s
+                .prepared
+                .as_ref()
+                .is_some_and(|result| result.kind == WorkerOutcomeKind::Complete)
+            {
+                WorkerPhase::Prepared
+            } else {
+                WorkerPhase::Failed
+            };
             s.status.server.running = false;
             for backend in &mut s.status.server.backends {
                 backend.ready = false;
@@ -281,7 +289,15 @@ impl Actor {
         self.process = None;
         self.ready_backends.clear();
         self.state.send_modify(|s| {
-            s.status.phase = WorkerPhase::Prepared;
+            s.status.phase = if s
+                .prepared
+                .as_ref()
+                .is_some_and(|result| result.kind == WorkerOutcomeKind::Complete)
+            {
+                WorkerPhase::Prepared
+            } else {
+                WorkerPhase::Failed
+            };
             s.status.server.running = false;
             for backend in &mut s.status.server.backends {
                 backend.ready = false;
