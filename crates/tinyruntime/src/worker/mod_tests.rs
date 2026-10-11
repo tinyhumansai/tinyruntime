@@ -794,3 +794,21 @@ async fn expired_reservations_are_closed_without_new_admission() {
     assert_eq!(manager.status(&handle).await.unwrap_err().kind, WorkerOutcomeKind::Closed);
     assert_eq!(manager.start(&handle).await.kind, WorkerOutcomeKind::Closed);
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn prepared_script_and_directory_are_private() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let manager = WorkerManager::new(root.path().to_path_buf());
+    let handle = manager.reserve().await.unwrap();
+    let directory = root.path().join(handle.0.replace(':', "_"));
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::write(directory.join("worker-script"), "old").unwrap();
+    std::fs::set_permissions(directory.join("worker-script"), std::fs::Permissions::from_mode(0o644)).unwrap();
+    assert_eq!(manager.prepare(WorkerPrepare {handle: handle.clone(), plan: plan(HEALTHY)}).await.kind, WorkerOutcomeKind::Complete);
+    assert_eq!(std::fs::metadata(&directory).unwrap().permissions().mode() & 0o777, 0o700);
+    assert_eq!(std::fs::metadata(directory.join("worker-script")).unwrap().permissions().mode() & 0o777, 0o600);
+    manager.shutdown().await;
+}

@@ -206,3 +206,11 @@ fn a_route_describes_where_it_points_rather_than_its_provider() {
     assert!(rendered.contains("nodejs"), "got {rendered}");
     assert!(rendered.contains("ai.example.Provider"), "got {rendered}");
 }
+
+#[tokio::test]
+async fn empty_preparation_language_is_rejected_even_when_registered() {
+    let mut registry = Registry::new();
+    let language = Language::new("");
+    registry.register(&language, "empty", Arc::new(StubProvider::new(language.clone())));
+    assert!(matches!(registry.prepare_environment(&language, &tinyruntime_bus::EnvironmentPreparationRequest::new("env", "runtime")).await, Err(Error::LanguageMissing)));
+}
