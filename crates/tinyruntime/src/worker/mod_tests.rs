@@ -931,3 +931,34 @@ async fn exited_worker_is_detected_without_a_request() {
     );
     manager.shutdown().await;
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn directory_cleanup_retries_without_another_stop_signal() {
+    let root = tempfile::tempdir().unwrap();
+    let manager = WorkerManager::new(root.path().to_path_buf());
+    let handle = manager.reserve().await.unwrap();
+    manager
+        .prepare(WorkerPrepare {
+            handle: handle.clone(),
+            plan: plan(HEALTHY),
+        })
+        .await;
+    let directory = root.path().join(handle.0.replace(':', "_"));
+    std::fs::rename(&directory, root.path().join("held-directory")).unwrap();
+    std::fs::write(&directory, b"temporary obstruction").unwrap();
+    let state = manager.book.lock().await.slots[&handle].state.subscribe();
+    assert_eq!(
+        manager.stop(&handle).await.reason.as_deref(),
+        Some("cleanup_failed")
+    );
+    std::fs::remove_file(directory).unwrap();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while !state.borrow().closed {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(manager.shutdown().await.kind, WorkerOutcomeKind::Complete);
+}
