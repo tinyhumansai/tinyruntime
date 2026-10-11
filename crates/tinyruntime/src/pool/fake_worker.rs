@@ -112,6 +112,16 @@ pub(crate) fn launch_with_mode(language: tinyruntime_bus::Language, mode: &str) 
 /// A launch that runs this test binary as a worker.
 pub(crate) fn launch(language: tinyruntime_bus::Language) -> Launch {
     let binary = std::env::current_exe().expect("a test binary has a path");
+    let env = super::env::build(
+        binary.parent().expect("a test binary has a directory"),
+        &[
+            (WORKER_MARKER.to_string(), "1".to_string()),
+            (
+                "RUST_BACKTRACE".to_string(),
+                std::env::var("RUST_BACKTRACE").unwrap_or_default(),
+            ),
+        ],
+    );
     Launch {
         language,
         binary,
@@ -121,15 +131,7 @@ pub(crate) fn launch(language: tinyruntime_bus::Language) -> Launch {
             "--nocapture".to_string(),
             "--test-threads=1".to_string(),
         ],
-        env: vec![
-            (WORKER_MARKER.to_string(), "1".to_string()),
-            // Some libtest builds consult these; carrying them keeps the child
-            // from behaving differently than the parent.
-            (
-                "RUST_BACKTRACE".to_string(),
-                std::env::var("RUST_BACKTRACE").unwrap_or_default(),
-            ),
-        ],
+        env,
         protocol_version: tinyruntime_bus::WORKER_PROTOCOL_VERSION,
         handshake_timeout: std::time::Duration::from_secs(20),
     }

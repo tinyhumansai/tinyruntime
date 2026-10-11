@@ -3,10 +3,11 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 python3 scripts/test-e2e-version.py
 python3 scripts/test-process-lints.py
+python3 scripts/test-timeout.py
 python3 scripts/check-bus-purity.py
 # Keep panic diagnostics visible even if another test stalls; a stalled suite fails CI.
-timeout 600 cargo test --locked --workspace -- --nocapture
-timeout 600 cargo test --locked --workspace --all-features -- --nocapture
+python3 scripts/run-with-timeout.py 600 cargo test --locked --workspace -- --nocapture
+python3 scripts/run-with-timeout.py 600 cargo test --locked --workspace --all-features -- --nocapture
 
 cargo run -p tinyruntime --example basic
 

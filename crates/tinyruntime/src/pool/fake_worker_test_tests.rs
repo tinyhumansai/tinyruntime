@@ -1,3 +1,4 @@
+//! Fake worker framing and process launch regression tests.
 use super::{Directive, JobRequest, handle, serve_on};
 
 /// One request line for `directive`.
@@ -247,8 +248,15 @@ fn serves_as_a_worker_when_asked() {
 #[test]
 fn fake_worker_launch_carries_the_allowlisted_process_environment() {
     let launch = super::launch(tinyruntime_bus::Language::nodejs());
-    let bin = launch.binary.parent().expect("test executable has a directory");
+    let bin = launch
+        .binary
+        .parent()
+        .expect("test executable has a directory");
     for entry in crate::pool::env::build(bin, &[]) {
-        assert!(launch.env.contains(&entry), "missing process environment: {}", entry.0);
+        assert!(
+            launch.env.contains(&entry),
+            "missing process environment: {}",
+            entry.0
+        );
     }
 }

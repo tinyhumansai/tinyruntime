@@ -253,14 +253,15 @@ impl Session {
                     Err(_) => return Err("cache_stage_cleanup_failed"),
                 }
             }
-            // Remove only this opened directory, never recursively delete user data.
+        }
+        if let Some(stage) = self.staging.take() {
+            // Consume the only handle: Windows refuses deletion while another
+            // handle without delete-sharing remains open. Remove only this
+            // opened directory, never recursively delete user data.
             stage
-                .try_clone()
-                .map_err(|_| "cache_stage_cleanup_failed")?
                 .remove_open_dir()
                 .map_err(|_| "cache_stage_cleanup_failed")?;
         }
-        self.staging = None;
         self.staged.clear();
         self.lock = None;
         Ok(())

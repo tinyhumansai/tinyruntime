@@ -167,3 +167,37 @@ async fn unsafe_lock_file_and_missing_required_entries_are_not_cached_successes(
     session.cleanup().unwrap();
     assert!(!root.join("ready").exists());
 }
+
+#[tokio::test]
+async fn cleanup_removes_owned_staging_and_releases_the_cache_lock() {
+    let scratch = crate::worker::test_tempdir().unwrap();
+    let root = scratch.path().canonicalize().unwrap();
+    let (_stop, mut receiver) = watch::channel(false);
+    let mut session = Session::acquire(
+        &root,
+        &recipe(),
+        &mut receiver,
+        Instant::now() + Duration::from_secs(1),
+    )
+    .await
+    .unwrap();
+    session.install(&recipe()).unwrap();
+    session.publish(&recipe()).unwrap();
+    session.cleanup().unwrap();
+    assert!(std::fs::read_dir(&root).unwrap().all(|entry| {
+        !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".tinyruntime-stage-")
+    }));
+    let next = Session::acquire(
+        &root,
+        &recipe(),
+        &mut receiver,
+        Instant::now() + Duration::from_secs(1),
+    )
+    .await
+    .unwrap();
+    assert!(next.cached);
+}
