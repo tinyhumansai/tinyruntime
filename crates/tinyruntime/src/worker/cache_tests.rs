@@ -209,7 +209,7 @@ async fn abandoned_cache_reply_and_shutdown_reap_preparation_before_unlock_and_n
             prepare(
                 &first,
                 recipe(vec![step(
-                    "printf '%s' $$ > pid; printf partial > payload; exec sleep 600",
+                    "printf partial > payload; printf '%s' $$ > pid.tmp; mv pid.tmp pid; exec sleep 600",
                 )]),
             )
             .await

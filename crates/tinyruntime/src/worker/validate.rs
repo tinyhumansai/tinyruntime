@@ -79,7 +79,17 @@ pub(super) fn request(request: &WorkerRequest) -> Result<(), &'static str> {
         return Err("request_limit");
     }
     let mut count = Count(1); // Include the terminating newline.
-    let wire = serde_json::json!({"id": request.operation.to_string(), "method": &request.method, "params": &request.params});
+    #[derive(serde::Serialize)]
+    struct Wire<'a> {
+        id: String,
+        method: &'a str,
+        params: &'a serde_json::Value,
+    }
+    let wire = Wire {
+        id: request.operation.to_string(),
+        method: &request.method,
+        params: &request.params,
+    };
     serde_json::to_writer(&mut count, &wire).map_err(|_| "request_limit")?;
     Ok(())
 }
