@@ -14,7 +14,7 @@ fn legacy_worker_wire_defaults_and_status_are_preserved() {
     let request: ServerRequest =
         serde_json::from_value(serde_json::json!({"id":"7","method":"alpha.run"})).unwrap();
     assert_eq!(request.params, serde_json::Value::Null);
-    let response: ServerResponse = serde_json::from_value(serde_json::json!({"id":null})).unwrap();
+    let response: ServerResponse = serde_json::from_value(serde_json::json!({})).unwrap();
     assert!(!response.ok);
     assert_eq!(response.result, None);
     assert_eq!(
