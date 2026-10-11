@@ -83,6 +83,9 @@ impl Registry {
         language: &Language,
         request: &tinyruntime_bus::EnvironmentPreparationRequest,
     ) -> Result<Option<EnvironmentPreparationPlan>> {
+        if language.is_empty() {
+            return Err(Error::LanguageMissing);
+        }
         let route = self
             .routes
             .iter()

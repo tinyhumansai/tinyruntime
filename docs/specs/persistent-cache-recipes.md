@@ -51,8 +51,10 @@ succeeded, native groups have been reaped and required paths verified. A stale
 marker is invalidated before work; the prior identity sidecar stays in place
 until successful publication so a failed rebuild cannot become adoptable as
 legacy. Failed offline legacy adoption leaves the original marker untouched.
-Only explicit artifact paths and the module's staging files are mutable; failures
-preserve user cache content and partially provisioned final environments. Cleanup
+Router-managed writes affect only explicit artifact paths and module staging
+files; router cleanup preserves other user content and partially provisioned
+final environments. Trusted native commands can modify any accessible file;
+their side effects are not rolled back on failure. Cleanup
 never recursively deletes the user's cache. Files added to staging by another
 actor are not claimed and deleted; cleanup failures remain retryable.
 

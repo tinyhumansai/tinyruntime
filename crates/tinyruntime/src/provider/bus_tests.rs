@@ -196,7 +196,7 @@ async fn an_advertised_provider_returns_its_environment_commands() -> TinyBusRes
     let (_peer, provider) = routed_with_capability(true).await?;
     let route = Route {
         language: Language::nodejs(),
-        bus_name: names::providers::PYTHON.into(),
+        bus_name: BUS_NAME.into(),
         provider: Arc::new(provider),
     };
     let request = EnvironmentPreparationRequest::new("/runtime/python", "/approved/environment")

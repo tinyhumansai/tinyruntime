@@ -47,6 +47,9 @@ async fn line<R: AsyncBufRead + Unpin>(reader: &mut R) -> Result<Vec<u8>, &'stat
         if complete {
             return Ok(bytes);
         }
+        if bytes.len() == MAX_LINE {
+            return Err("frame_limit");
+        }
     }
 }
 

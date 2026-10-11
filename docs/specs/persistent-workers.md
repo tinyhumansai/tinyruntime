@@ -25,14 +25,16 @@ cannot itself substitute for the explicit unload barrier.
 The stdio ready/request/response and backend/server status vocabulary preserves
 existing JSONL fields and serde defaults exactly. The contract owns these types;
 legacy pyserver paths reexport them. Requests use caller-known monotonically
-increasing operation numbers. The supervisor retains a bounded recent terminal
+increasing operation numbers, encoded as decimal string IDs on the legacy JSONL
+wire. The supervisor retains a bounded recent terminal
 reply window; evicted/stale operation numbers are rejected without reexecution.
 Concurrent out-of-order submissions remain supported within that window. A lost
 reply is recoverable by retry while retained, and always safe from duplicate
 execution afterward. Payloads, script bytes, environment, queued commands,
 response lines and output-memory retention have explicit fixed upper bounds.
 
-Startup timeout defaults to30s, request deadline60s, startup backoff300s.
+Callers supply positive startup and request timeouts; their ceilings are thirty
+minutes and sixty seconds respectively. Startup failure backoff is 300 seconds.
 Deadlines cover the whole operation, including junk or wrong-id responses.
 A failed request resets native ownership and retries once, preserving legacy
 behavior. Successful requests reset idle age; configured backend-specific idle
@@ -41,7 +43,7 @@ Sensitive stdout/stderr, parameters, environment values and filesystem paths do
 not enter public operational error messages or logs.
 
 New router members advance the router contract minor version. Existing provider
-members remain version1.0-compatible; router-only additions do not require an old
+members remain version 1.0-compatible; router-only additions do not require an old
 provider to expose unrelated operations. Existing member arities remain unchanged.
 Provider descriptors omit an empty capability list, preserving the original
 wire shape. `PrepareEnvironment` is optional and is called only when the

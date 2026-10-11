@@ -72,10 +72,8 @@ pub(super) async fn run(
             }
         }
         actor.state.send_modify(|s| s.cleanup_failed = true);
-        if actor.stop.changed().await.is_err() {
-            // Module drop has no public retry caller: continue retaining/reaping.
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
+        // Retry retained cleanup even when Stop has already been observed.
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
     actor.state.send_modify(|s| {
         s.closed = true;
@@ -195,11 +193,7 @@ impl Actor {
             return outcome(WorkerOutcomeKind::Failed, Some(reason));
         }
         let deadline = Instant::now() + Duration::from_millis(self.plan.startup_timeout_ms);
-        if tokio::fs::create_dir_all(&self.root).await.is_err()
-            || tokio::fs::write(self.root.join("worker-script"), &self.plan.source)
-                .await
-                .is_err()
-        {
+        if self.install_script().await.is_err() {
             return outcome(WorkerOutcomeKind::Failed, Some("install_failed"));
         }
         for step in &self.plan.preparation {
@@ -226,6 +220,30 @@ impl Actor {
         outcome(WorkerOutcomeKind::Complete, None)
     }
 
+    async fn install_script(&self) -> std::io::Result<()> {
+        use tokio::io::AsyncWriteExt;
+        tokio::fs::create_dir_all(&self.root).await?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            tokio::fs::set_permissions(&self.root, std::fs::Permissions::from_mode(0o700)).await?;
+        }
+        let path = self.root.join("worker-script");
+        let mut options = tokio::fs::OpenOptions::new();
+        options.write(true).create(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        let mut file = options.open(path).await?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            file.set_permissions(std::fs::Permissions::from_mode(0o600))
+                .await?;
+        }
+        file.set_len(0).await?;
+        file.write_all(self.plan.source.as_bytes()).await
+    }
+
     async fn cleanup(&mut self) -> Result<(), &'static str> {
         if let Some(process) = &mut self.preparation {
             process.cleanup().await?;
@@ -241,6 +259,7 @@ impl Actor {
         self.process = None;
         self.ready_backends.clear();
         self.state.send_modify(|s| {
+            s.status.phase = WorkerPhase::Prepared;
             s.status.server.running = false;
             for backend in &mut s.status.server.backends {
                 backend.ready = false;

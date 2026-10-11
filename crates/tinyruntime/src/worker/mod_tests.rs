@@ -129,8 +129,10 @@ async fn request_deadline_includes_pending_startup() {
         params: serde_json::Value::Null,
     };
     let result = tokio::time::timeout(Duration::from_secs(1), manager.request(request)).await;
-    manager.shutdown().await;
     assert!(result.is_ok(), "whole request budget must include startup");
+    tokio::time::timeout(Duration::from_secs(5), manager.shutdown())
+        .await
+        .unwrap();
     assert_eq!(result.unwrap().reason.as_deref(), Some("request_timeout"));
 }
 
@@ -737,6 +739,7 @@ async fn request_deadline_during_idle_cleanup_keeps_stop_and_shutdown_waiting() 
         pending.await.unwrap().reason.as_deref(),
         Some("request_timeout")
     );
+    tokio::time::resume();
     let stop_ready = tokio::time::timeout(Duration::from_secs(1), manager.stop(&handle))
         .await
         .is_ok();
@@ -791,7 +794,10 @@ async fn expired_reservations_are_closed_without_new_admission() {
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     tokio::time::advance(RESERVATION_LIFETIME).await;
-    assert_eq!(manager.status(&handle).await.unwrap_err().kind, WorkerOutcomeKind::Closed);
+    assert_eq!(
+        manager.status(&handle).await.unwrap_err().kind,
+        WorkerOutcomeKind::Closed
+    );
     assert_eq!(manager.start(&handle).await.kind, WorkerOutcomeKind::Closed);
 }
 
@@ -806,9 +812,32 @@ async fn prepared_script_and_directory_are_private() {
     std::fs::create_dir_all(&directory).unwrap();
     std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o755)).unwrap();
     std::fs::write(directory.join("worker-script"), "old").unwrap();
-    std::fs::set_permissions(directory.join("worker-script"), std::fs::Permissions::from_mode(0o644)).unwrap();
-    assert_eq!(manager.prepare(WorkerPrepare {handle: handle.clone(), plan: plan(HEALTHY)}).await.kind, WorkerOutcomeKind::Complete);
-    assert_eq!(std::fs::metadata(&directory).unwrap().permissions().mode() & 0o777, 0o700);
-    assert_eq!(std::fs::metadata(directory.join("worker-script")).unwrap().permissions().mode() & 0o777, 0o600);
+    std::fs::set_permissions(
+        directory.join("worker-script"),
+        std::fs::Permissions::from_mode(0o644),
+    )
+    .unwrap();
+    assert_eq!(
+        manager
+            .prepare(WorkerPrepare {
+                handle: handle.clone(),
+                plan: plan(HEALTHY)
+            })
+            .await
+            .kind,
+        WorkerOutcomeKind::Complete
+    );
+    assert_eq!(
+        std::fs::metadata(&directory).unwrap().permissions().mode() & 0o777,
+        0o700
+    );
+    assert_eq!(
+        std::fs::metadata(directory.join("worker-script"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o600
+    );
     manager.shutdown().await;
 }

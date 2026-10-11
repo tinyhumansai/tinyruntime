@@ -8,7 +8,7 @@ pub(super) const MAX_FILE: usize = 64 * 1024;
 fn forbidden(value: &str) -> bool {
     matches!(
         value.to_ascii_lowercase().as_str(),
-        ".ssh" | ".gnupg" | ".aws" | ".azure" | ".kube" | ".config-gcloud"
+        ".ssh" | ".gnupg" | ".aws" | ".azure" | ".kube" | ".config"
     )
 }
 
@@ -53,6 +53,24 @@ pub(super) fn scope(scope: &WorkerCacheScope) -> Result<(), &'static str> {
     {
         return Err("cache_scope_forbidden");
     }
+    #[cfg(windows)]
+    {
+        let components: Vec<_> = path
+            .components()
+            .filter_map(|part| match part {
+                Component::Normal(value) => value.to_str().map(str::to_ascii_lowercase),
+                _ => None,
+            })
+            .collect();
+        if components.first().is_some_and(|first| {
+            matches!(
+                first.as_str(),
+                "windows" | "program files" | "program files (x86)" | "programdata"
+            )
+        }) {
+            return Err("cache_scope_forbidden");
+        }
+    }
     Ok(())
 }
 
@@ -60,7 +78,7 @@ pub(super) fn relative(path: &str) -> Result<(), &'static str> {
     safe_relative(path)?;
     if path
         .split('/')
-        .any(|part| part.starts_with(".tinyruntime-"))
+        .any(|part| part.to_ascii_lowercase().starts_with(".tinyruntime-"))
     {
         return Err("cache_path_invalid");
     }

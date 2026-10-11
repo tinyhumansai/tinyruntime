@@ -99,6 +99,9 @@ pub trait Provider: std::fmt::Debug + Send + Sync {
     /// The router calls this only when [`ProviderDescriptor::capabilities`]
     /// advertises [`ProviderCapability::PrepareEnvironment`]. Implementations
     /// that do not support the capability keep the default `None` response.
+    ///
+    /// # Errors
+    /// Returns the provider error when an advertised preparation operation fails.
     async fn prepare_environment(
         &self,
         _request: &EnvironmentPreparationRequest,

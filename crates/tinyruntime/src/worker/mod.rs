@@ -15,8 +15,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 pub use tinyruntime_bus::worker::{
-    CacheRecipe, ServerStatus, WorkerCacheScope, WorkerHandle, WorkerOutcome, WorkerOutcomeKind,
-    WorkerPhase, WorkerPlan, WorkerPrepare, WorkerPrepareCached, WorkerRequest, WorkerStatus,
+    CacheAdoptionPolicy, CacheArtifact, CacheEntry, CacheEntryKind, CacheRecipe, ServerStatus,
+    WorkerCacheScope, WorkerCommand, WorkerHandle, WorkerOutcome, WorkerOutcomeKind, WorkerPhase,
+    WorkerPlan, WorkerPrepare, WorkerPrepareCached, WorkerRequest, WorkerStatus,
 };
 use tokio::sync::{Mutex, mpsc, oneshot, watch};
 use tokio::time::Instant;
@@ -83,6 +84,12 @@ struct Slot {
     commands: Option<mpsc::Sender<Command>>,
     stop: watch::Sender<bool>,
     state: watch::Sender<State>,
+}
+
+impl Slot {
+    fn expired(&self) -> bool {
+        self.plan.is_none() && self.reserved_at.elapsed() >= RESERVATION_LIFETIME
+    }
 }
 
 impl Drop for Slot {
@@ -292,6 +299,9 @@ impl WorkerManager {
             let Some(slot) = book.slots.get(handle) else {
                 return Self::missing(&book, handle);
             };
+            if slot.expired() {
+                return outcome(WorkerOutcomeKind::Closed, Some("reservation_expired"));
+            }
             if *slot.stop.borrow() || slot.state.borrow().closed {
                 return outcome(WorkerOutcomeKind::Closed, None);
             }
@@ -325,6 +335,9 @@ impl WorkerManager {
             let Some(slot) = book.slots.get(&handle) else {
                 return Self::missing(&book, &handle);
             };
+            if slot.expired() {
+                return outcome(WorkerOutcomeKind::Closed, Some("reservation_expired"));
+            }
             let Some(plan) = &slot.plan else {
                 return outcome(WorkerOutcomeKind::Invalid, Some("not_prepared"));
             };
@@ -350,6 +363,7 @@ impl WorkerManager {
         let book = self.book.lock().await;
         book.slots
             .get(handle)
+            .filter(|slot| !slot.expired())
             .map(|slot| slot.state.borrow().status.clone())
             .ok_or_else(|| Self::missing(&book, handle))
     }

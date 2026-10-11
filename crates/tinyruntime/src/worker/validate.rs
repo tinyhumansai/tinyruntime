@@ -78,11 +78,9 @@ pub(super) fn request(request: &WorkerRequest) -> Result<(), &'static str> {
     if request.operation == 0 || request.handle.0.len() > 64 || request.method.len() > 256 {
         return Err("request_limit");
     }
-    let mut count = Count(0);
-    serde_json::to_writer(&mut count, &request.params).map_err(|_| "request_limit")?;
-    if count.0 + request.method.len() + 128 >= MAX_LINE {
-        return Err("request_limit");
-    }
+    let mut count = Count(1); // Include the terminating newline.
+    let wire = serde_json::json!({"id": request.operation.to_string(), "method": &request.method, "params": &request.params});
+    serde_json::to_writer(&mut count, &wire).map_err(|_| "request_limit")?;
     Ok(())
 }
 
