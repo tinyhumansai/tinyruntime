@@ -17,7 +17,7 @@ try {
         foreach ($entry in $zip.Entries) {
             $parts = $entry.FullName -split '[\\/]'
             $mode = ($entry.ExternalAttributes -shr 16) -band 0xF000
-            if ([IO.Path]::IsPathRooted($entry.FullName) -or ($parts -contains '..') -or ($parts -contains '.') -or $mode -eq 0xA000) {
+            if ([IO.Path]::IsPathRooted($entry.FullName) -or ($parts -contains '..') -or ($parts -contains '.') -or ($mode -notin 0, 0x8000, 0x4000)) {
                 throw "Archive member is unsafe: $($entry.FullName)"
             }
         }

@@ -21,6 +21,6 @@ if [ -n "$forbidden" ]; then
   exit 1
 fi
 case "${RUNNER_OS:-$(uname -s)}" in
-  Windows|MINGW*|MSYS*|CYGWIN*) ;;
+  Windows|MINGW*|MSYS*|CYGWIN*) python3 scripts/test-zip-entry-types.py ;;
   *) python3 scripts/test-package-layout.py ;;
 esac
