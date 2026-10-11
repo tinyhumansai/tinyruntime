@@ -9,6 +9,10 @@ commands in the plan. It owns native process groups (Unix) or jobs (Windows),
 stdio framing and cleanup. Language providers and application recipes decide
 what those bytes mean; this module contains no interpreter/package/model logic.
 
+Successful preparation reports the server and configured backends as enabled,
+with `running` and backend `ready` false until startup succeeds. Backend order
+matches the plan.
+
 Reserve a handle before preparation or startup. Idle reservations expire after
 30 seconds. There are 16 live slots, with an eight-command queue for each
 prepared resource. Retired identities cannot recreate native resources, and

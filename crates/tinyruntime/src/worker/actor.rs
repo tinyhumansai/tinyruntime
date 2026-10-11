@@ -89,6 +89,22 @@ impl Actor {
         self.state.send_modify(|s| {
             s.prepared = Some(prepared.clone());
             s.status.phase = if prepared.kind == WorkerOutcomeKind::Complete {
+                s.status.server = ServerStatus {
+                    enabled: true,
+                    running: false,
+                    backends: self
+                        .plan
+                        .backends
+                        .iter()
+                        .map(|id| BackendStatus {
+                            id: id.clone(),
+                            enabled: true,
+                            ready: false,
+                            message: None,
+                        })
+                        .collect(),
+                    message: None,
+                };
                 WorkerPhase::Prepared
             } else {
                 WorkerPhase::Failed
