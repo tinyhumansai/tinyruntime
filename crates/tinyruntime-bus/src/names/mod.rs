@@ -77,29 +77,6 @@ pub mod methods {
 
     /// Describes an optional environment recipe through the configured provider.
     pub const PREPARE_ENVIRONMENT: &str = "PrepareEnvironment";
-    /// Generic persistent worker lifecycle member `WorkerReserve`.
-    pub const WORKER_RESERVE: &str = "WorkerReserve";
-
-    /// Generic persistent worker lifecycle member `WorkerPrepare`.
-    pub const WORKER_PREPARE: &str = "WorkerPrepare";
-
-    /// Prepare a known resource using an approved persistent cache recipe.
-    pub const WORKER_PREPARE_CACHED: &str = "WorkerPrepareCached";
-
-    /// Generic persistent worker lifecycle member `WorkerStart`.
-    pub const WORKER_START: &str = "WorkerStart";
-
-    /// Generic persistent worker lifecycle member `WorkerRequest`.
-    pub const WORKER_REQUEST: &str = "WorkerRequest";
-
-    /// Generic persistent worker lifecycle member `WorkerStatus`.
-    pub const WORKER_STATUS: &str = "WorkerStatus";
-
-    /// Generic persistent worker lifecycle member `WorkerStop`.
-    pub const WORKER_STOP: &str = "WorkerStop";
-
-    /// Generic persistent worker lifecycle member `WorkerShutdown`.
-    pub const WORKER_SHUTDOWN: &str = "WorkerShutdown";
 }
 
 /// One constant per member of [`PROVIDER_INTERFACE`].
@@ -169,14 +146,6 @@ pub const METHODS: &[&str] = &[
     methods::EXECUTE,
     methods::POOL_STATS,
     methods::PREPARE_ENVIRONMENT,
-    methods::WORKER_RESERVE,
-    methods::WORKER_PREPARE,
-    methods::WORKER_PREPARE_CACHED,
-    methods::WORKER_START,
-    methods::WORKER_REQUEST,
-    methods::WORKER_STATUS,
-    methods::WORKER_STOP,
-    methods::WORKER_SHUTDOWN,
 ];
 
 /// Every member of [`PROVIDER_INTERFACE`], in dispatch order.

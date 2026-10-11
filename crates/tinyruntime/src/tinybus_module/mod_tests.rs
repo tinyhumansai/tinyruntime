@@ -211,7 +211,6 @@ fn config_routing_node(harness_dir: &std::path::Path) -> ModuleConfig {
 #[test]
 fn declared_methods_match_the_dispatch_table() {
     let service = RuntimeService {
-        workers: crate::worker::WorkerManager::new(std::path::PathBuf::from("unused-test-root")),
         engine: std::sync::Arc::new(Engine::new(
             Registry::new(),
             reqwest::Client::new(),
@@ -230,7 +229,6 @@ fn declared_methods_match_the_dispatch_table() {
 #[test]
 fn the_served_interface_name_matches_the_contract() {
     let service = RuntimeService {
-        workers: crate::worker::WorkerManager::new(std::path::PathBuf::from("unused-test-root")),
         engine: std::sync::Arc::new(Engine::new(
             Registry::new(),
             reqwest::Client::new(),
@@ -676,194 +674,6 @@ async fn a_cached_install_is_reported_through_the_routers_resolve() -> TinyBusRe
     Ok(())
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn generic_persistent_worker_members_dispatch_real_jsonl_and_cleanup() -> TinyBusResult<()> {
-    use tinyruntime_bus::worker::{
-        WorkerCommand, WorkerHandle, WorkerOutcome, WorkerOutcomeKind, WorkerPlan, WorkerPrepare,
-        WorkerRequest, WorkerStatus,
-    };
-    let bus = bus();
-    let scratch = tempfile::tempdir().unwrap();
-    let module = Connection::connect(bus.connect().await?).await?;
-    let mut config = config_routing_node(scratch.path());
-    config.worker_cache_scopes = vec![tinyruntime_bus::worker::WorkerCacheScope {
-        id: "cache".into(),
-        root: scratch
-            .path()
-            .canonicalize()
-            .unwrap()
-            .join("recipe-cache")
-            .to_string_lossy()
-            .into_owned(),
-    }];
-    setup(module, config).await?;
-    let client = Connection::connect(bus.connect().await?).await?;
-    let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
-    let handle: WorkerHandle = proxy.call(names::methods::WORKER_RESERVE, ()).await?;
-    let source = r#"printf '%s\n' '{"ready":true,"protocol":1,"backends":["alpha"]}'
-while IFS= read -r line; do
- id=${line#*\"id\":\"}; id=${id%%\"*}
- printf '{"id":"%s","ok":true,"result":{"answer":42}}\n' "$id"
-done
-"#;
-    let plan = WorkerPlan {
-        source: source.into(),
-        command: WorkerCommand {
-            executable: "/bin/sh".into(),
-            args: Vec::new(),
-            env: Vec::new(),
-            timeout_ms: None,
-        },
-        preparation: Vec::new(),
-        backends: vec!["alpha".into()],
-        startup_timeout_ms: 30_000,
-        request_timeout_ms: 60_000,
-        idle_backend: None,
-        idle_timeout_ms: 0,
-    };
-    let prepared: WorkerOutcome = proxy
-        .call(
-            names::methods::WORKER_PREPARE,
-            (WorkerPrepare {
-                handle: handle.clone(),
-                plan: plan.clone(),
-            },),
-        )
-        .await?;
-    assert_eq!(prepared.kind, WorkerOutcomeKind::Complete);
-    let started: WorkerOutcome = proxy
-        .call(names::methods::WORKER_START, (handle.clone(),))
-        .await?;
-    assert_eq!(started.kind, WorkerOutcomeKind::Complete);
-    let status: WorkerStatus = proxy
-        .call(names::methods::WORKER_STATUS, (handle.clone(),))
-        .await?;
-    assert!(status.server.running);
-    assert!(status.server.backends[0].ready);
-    let response: WorkerOutcome = proxy
-        .call(
-            names::methods::WORKER_REQUEST,
-            (WorkerRequest {
-                handle: handle.clone(),
-                operation: 1,
-                method: "alpha.run".into(),
-                params: serde_json::json!({"input":"fixture"}),
-            },),
-        )
-        .await?;
-    assert_eq!(
-        response.response.unwrap().result,
-        Some(serde_json::json!({"answer":42}))
-    );
-    let stopped: WorkerOutcome = proxy.call(names::methods::WORKER_STOP, (handle,)).await?;
-    assert_eq!(stopped.kind, WorkerOutcomeKind::Complete);
-    let shutdown: WorkerOutcome = proxy.call(names::methods::WORKER_SHUTDOWN, ()).await?;
-    assert_eq!(shutdown.kind, WorkerOutcomeKind::Complete);
-    assert!(
-        proxy
-            .call::<WorkerHandle>(names::methods::WORKER_RESERVE, ())
-            .await
-            .is_err()
-    );
-    Ok(())
-}
-
-#[cfg(unix)]
-#[tokio::test]
-async fn cached_worker_member_publishes_exact_marker_bytes() -> TinyBusResult<()> {
-    use tinyruntime_bus::worker::{
-        WorkerCommand, WorkerHandle, WorkerOutcome, WorkerOutcomeKind, WorkerPlan,
-        WorkerPrepareCached,
-    };
-    let scratch = tempfile::tempdir().unwrap();
-    let bus = bus();
-    let module = Connection::connect(bus.connect().await?).await?;
-    let mut config = config_routing_node(scratch.path());
-    config.worker_cache_scopes = vec![tinyruntime_bus::worker::WorkerCacheScope {
-        id: "cache".into(),
-        root: scratch
-            .path()
-            .canonicalize()
-            .unwrap()
-            .join("recipe-cache")
-            .to_string_lossy()
-            .into_owned(),
-    }];
-    setup(module, config).await?;
-    let client = Connection::connect(bus.connect().await?).await?;
-    let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
-    let handle: WorkerHandle = proxy.call(names::methods::WORKER_RESERVE, ()).await?;
-    let prepared: WorkerOutcome = proxy
-        .call(
-            names::methods::WORKER_PREPARE_CACHED,
-            (WorkerPrepareCached {
-                handle: handle.clone(),
-                plan: WorkerPlan {
-                    source: "exit 0".into(),
-                    command: WorkerCommand {
-                        executable: "/bin/sh".into(),
-                        args: Vec::new(),
-                        env: Vec::new(),
-                        timeout_ms: None,
-                    },
-                    preparation: Vec::new(),
-                    backends: Vec::new(),
-                    startup_timeout_ms: 1000,
-                    request_timeout_ms: 1000,
-                    idle_backend: None,
-                    idle_timeout_ms: 0,
-                },
-                recipe: tinyruntime_bus::worker::CacheRecipe {
-                    scope: "cache".into(),
-                    artifacts: Vec::new(),
-                    steps: Vec::new(),
-                    required: Vec::new(),
-                    marker: tinyruntime_bus::worker::CacheArtifact {
-                        path: "ready".into(),
-                        bytes: b"exact".to_vec(),
-                    },
-                    adoption: tinyruntime_bus::worker::CacheAdoptionPolicy::Strict,
-                    timeout_ms: 1000,
-                },
-            },),
-        )
-        .await?;
-    assert_eq!(prepared.kind, WorkerOutcomeKind::Complete);
-    assert_eq!(
-        std::fs::read(scratch.path().join("recipe-cache/ready")).unwrap(),
-        b"exact"
-    );
-    let stopped: WorkerOutcome = proxy.call(names::methods::WORKER_STOP, (handle,)).await?;
-    assert_eq!(stopped.kind, WorkerOutcomeKind::Complete);
-    Ok(())
-}
-
-#[tokio::test]
-async fn worker_bus_errors_preserve_retry_and_identity_classifications() {
-    let service = RuntimeService {
-        workers: crate::worker::WorkerManager::new(std::path::PathBuf::from("unused-test-root")),
-        engine: std::sync::Arc::new(Engine::new(
-            Registry::new(),
-            reqwest::Client::new(),
-            std::path::PathBuf::from("unused-test-root"),
-        )),
-    };
-    for _ in 0..16 {
-        service.worker_reserve().await.unwrap();
-    }
-    assert!(
-        matches!(service.worker_reserve().await.unwrap_err(), tinybus::Error::MethodFailed {name, message} if name.ends_with(".Busy") && message == "worker_capacity")
-    );
-    assert!(
-        matches!(service.worker_status(tinyruntime_bus::worker::WorkerHandle("foreign".into())).await.unwrap_err(), tinybus::Error::MethodFailed {name, ..} if name.ends_with(".Unknown"))
-    );
-    service.workers.shutdown().await;
-    assert!(
-        matches!(service.worker_reserve().await.unwrap_err(), tinybus::Error::MethodFailed {name, message} if name.ends_with(".Closed") && message == "manager_shutdown")
-    );
-}
-
 #[tokio::test]
 async fn public_bus_rejects_native_worker_lifecycle_members() -> TinyBusResult<()> {
     let bus = bus();
@@ -873,12 +683,24 @@ async fn public_bus_rejects_native_worker_lifecycle_members() -> TinyBusResult<(
     let client = Connection::connect(bus.connect().await?).await?;
     let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
     for member in [
-        "WorkerReserve", "WorkerPrepare", "WorkerPrepareCached", "WorkerStart",
-        "WorkerRequest", "WorkerStatus", "WorkerStop", "WorkerShutdown",
+        "WorkerReserve",
+        "WorkerPrepare",
+        "WorkerPrepareCached",
+        "WorkerStart",
+        "WorkerRequest",
+        "WorkerStatus",
+        "WorkerStop",
+        "WorkerShutdown",
     ] {
-        let error = proxy.call::<serde_json::Value>(member, ()).await.unwrap_err();
-        assert!(matches!(error, tinybus::Error::MethodFailed { name, .. }
-            if name.ends_with(".UnknownMethod")), "{member} must not be public");
+        let error = proxy
+            .call::<serde_json::Value>(member, ())
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(error, tinybus::Error::MethodFailed { name, .. }
+            if name.ends_with(".UnknownMethod")),
+            "{member} must not be public"
+        );
     }
     assert!(!scratch.path().join("persistent-workers").exists());
     Ok(())
