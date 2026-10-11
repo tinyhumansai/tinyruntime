@@ -37,7 +37,7 @@ fn recipe() -> CacheRecipe {
 
 #[tokio::test]
 async fn cache_lock_wait_observes_deadline_and_cancellation_without_stealing_lock() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let root = root.path().canonicalize().unwrap();
     let lock = std::fs::OpenOptions::new()
         .create(true)
@@ -87,8 +87,8 @@ async fn cache_lock_wait_observes_deadline_and_cancellation_without_stealing_loc
 #[cfg(unix)]
 #[tokio::test]
 async fn scope_and_lock_replacements_refuse_readiness_publication_without_outside_writes() {
-    let scratch = tempfile::tempdir().unwrap();
-    let outside = tempfile::tempdir().unwrap();
+    let scratch = crate::worker::test_tempdir().unwrap();
+    let outside = crate::worker::test_tempdir().unwrap();
     let root = scratch.path().canonicalize().unwrap().join("cache");
     let (_stop, mut receiver) = watch::channel(false);
     let mut session = Session::acquire(
@@ -126,7 +126,7 @@ async fn scope_and_lock_replacements_refuse_readiness_publication_without_outsid
 #[cfg(unix)]
 #[tokio::test]
 async fn unsafe_lock_file_and_missing_required_entries_are_not_cached_successes() {
-    let scratch = tempfile::tempdir().unwrap();
+    let scratch = crate::worker::test_tempdir().unwrap();
     let root = scratch.path().canonicalize().unwrap();
     let (_stop, mut receiver) = watch::channel(false);
     std::os::unix::fs::symlink(root.join("outside"), root.join(".tinyruntime-cache.lock")).unwrap();

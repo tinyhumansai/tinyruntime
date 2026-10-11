@@ -53,9 +53,24 @@ async fn line<R: AsyncBufRead + Unpin>(reader: &mut R) -> Result<Vec<u8>, &'stat
     }
 }
 
-fn command(plan: &WorkerCommand, root: &Path) -> Command {
+fn command(
+    plan: &WorkerCommand,
+    root: &Path,
+    directory: Option<&cap_std::fs::Dir>,
+) -> std::io::Result<Command> {
     let mut cmd = Command::new(&plan.executable);
-    cmd.args(&plan.args).current_dir(root).env_clear();
+    cmd.args(&plan.args).env_clear();
+    #[cfg(unix)]
+    if let Some(directory) = directory {
+        tinyruntime_process::current_dir(cmd.as_std_mut(), directory)?;
+    } else {
+        cmd.current_dir(root);
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = directory;
+        cmd.current_dir(root);
+    }
     let bin = Path::new(&plan.executable)
         .parent()
         .unwrap_or_else(|| Path::new("."));
@@ -66,7 +81,7 @@ fn command(plan: &WorkerCommand, root: &Path) -> Command {
         .kill_on_drop(true);
     #[cfg(windows)]
     cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    cmd
+    Ok(cmd)
 }
 
 /// The task owns the group throughout command-group's uncancelled native wait.
@@ -188,8 +203,9 @@ impl Process {
         plan: &WorkerCommand,
         root: &Path,
         script: &Path,
+        directory: Option<&cap_std::fs::Dir>,
     ) -> Result<Self, &'static str> {
-        let mut cmd = command(plan, root);
+        let mut cmd = command(plan, root, directory).map_err(|_| "spawn_failed")?;
         cmd.arg(script);
         let mut child = cmd
             .group()
@@ -308,8 +324,12 @@ pub(super) struct Preparation {
 }
 
 impl Preparation {
-    pub(super) fn spawn(plan: &WorkerCommand, root: &Path) -> Result<Self, &'static str> {
-        let mut cmd = command(plan, root);
+    pub(super) fn spawn(
+        plan: &WorkerCommand,
+        root: &Path,
+        directory: Option<&cap_std::fs::Dir>,
+    ) -> Result<Self, &'static str> {
+        let mut cmd = command(plan, root, directory).map_err(|_| "prepare_spawn_failed")?;
         cmd.stdin(Stdio::null());
         let mut child = cmd
             .group()

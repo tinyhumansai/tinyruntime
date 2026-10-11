@@ -444,3 +444,10 @@ mod tests;
 #[cfg(test)]
 #[path = "cache_tests.rs"]
 mod cache_tests;
+
+// Darwin's OS temp root contains the trusted /var -> /private/var alias.
+// Use its physical location for fixtures; production no-follow checks stay strict.
+#[cfg(test)]
+fn test_tempdir() -> std::io::Result<tempfile::TempDir> {
+    tempfile::tempdir_in(std::env::temp_dir().canonicalize()?)
+}

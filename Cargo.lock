@@ -1426,6 +1426,7 @@ dependencies = [
  "tinybus",
  "tinybus-module",
  "tinyruntime-bus",
+ "tinyruntime-process",
  "tokio",
  "tracing",
  "uuid",

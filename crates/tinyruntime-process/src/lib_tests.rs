@@ -24,5 +24,21 @@ fn child_uses_owned_directory_after_rename_and_symlink_replacement() {
     let output = command.output().unwrap();
     assert!(output.status.success());
     assert_eq!(output.stdout, b"pinned");
+    // A reusable command retains the same owned fd for every spawn.
+    assert_eq!(command.output().unwrap().stdout, b"pinned");
+    assert_eq!(std::env::current_dir().unwrap(), parent_cwd);
+}
+
+#[test]
+fn spawning_with_a_file_as_cwd_fails_without_changing_parent_directory() {
+    let file = tempfile::tempfile().unwrap();
+    let parent_cwd = std::env::current_dir().unwrap();
+    let mut command = Command::new("/bin/sh");
+    command.args(["-c", "exit 0"]);
+    current_dir(&mut command, &file).unwrap();
+    assert_eq!(
+        command.spawn().unwrap_err().kind(),
+        std::io::ErrorKind::NotADirectory
+    );
     assert_eq!(std::env::current_dir().unwrap(), parent_cwd);
 }

@@ -50,6 +50,11 @@ pub(super) struct Session {
 }
 
 impl Session {
+    /// Borrow the retained capability for child-side cwd binding.
+    pub(super) fn directory(&self) -> &Dir {
+        &self.root
+    }
+
     pub(super) async fn acquire(
         path: &Path,
         recipe: &CacheRecipe,

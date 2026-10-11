@@ -201,7 +201,11 @@ impl Actor {
                 .as_ref()
                 .ok_or("cache_session_missing")?
                 .check_binding()?;
-            self.preparation = Some(Preparation::spawn(step, &cached.root)?);
+            self.preparation = Some(Preparation::spawn(
+                step,
+                &cached.root,
+                self.cache.as_ref().map(Session::directory),
+            )?);
             let preparation = self.preparation.as_mut().ok_or("prepare_closed")?;
             let step_deadline = native::command_deadline(step, deadline);
             let result = preparation.execute(&mut self.stop, step_deadline).await;
@@ -230,7 +234,7 @@ impl Actor {
             return outcome(WorkerOutcomeKind::Failed, Some("install_failed"));
         }
         for step in &self.plan.preparation {
-            match Preparation::spawn(step, &self.execution_root()) {
+            match Preparation::spawn(step, &self.root, self.directory.as_ref()) {
                 Ok(process) => self.preparation = Some(process),
                 Err(reason) => return outcome(WorkerOutcomeKind::Failed, Some(reason)),
             }
@@ -292,21 +296,6 @@ impl Actor {
         }
         file.set_len(0).await?;
         file.write_all(self.plan.source.as_bytes()).await
-    }
-
-    // The child changes directory before exec while this descriptor is still open.
-    // Its relative script argument then resolves against the pinned working directory.
-    fn execution_root(&self) -> PathBuf {
-        #[cfg(unix)]
-        if let Some(directory) = &self.directory {
-            use std::os::fd::AsRawFd;
-            #[cfg(target_os = "linux")]
-            let prefix = "/proc/self/fd";
-            #[cfg(not(target_os = "linux"))]
-            let prefix = "/dev/fd";
-            return PathBuf::from(prefix).join(directory.as_raw_fd().to_string());
-        }
-        self.root.clone()
     }
 
     async fn cleanup(&mut self) -> Result<(), &'static str> {
@@ -394,8 +383,9 @@ impl Actor {
             .send_modify(|s| s.status.phase = WorkerPhase::Starting);
         let result = match Process::spawn(
             &self.plan.command,
-            &self.execution_root(),
+            &self.root,
             std::path::Path::new("./worker-script"),
+            self.directory.as_ref(),
         ) {
             Ok(process) => {
                 self.process = Some(process);

@@ -7,7 +7,7 @@ use super::*;
 
 #[tokio::test]
 async fn retired_handles_do_not_exhaust_future_reservations() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     for _ in 0..5000 {
         let handle = manager.reserve().await.unwrap();
@@ -54,7 +54,7 @@ done
 #[cfg(unix)]
 #[tokio::test]
 async fn replayed_operations_do_not_repeat_worker_side_effects() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     assert_eq!(
@@ -111,7 +111,7 @@ async fn replayed_operations_do_not_repeat_worker_side_effects() {
 #[cfg(unix)]
 #[tokio::test]
 async fn request_deadline_includes_pending_startup() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     let mut launch = plan("exec sleep 600");
@@ -138,7 +138,7 @@ async fn request_deadline_includes_pending_startup() {
 
 #[tokio::test(start_paused = true)]
 async fn abandoned_idle_reservations_expire_and_release_capacity() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let mut old = Vec::new();
     for _ in 0..CAPACITY {
@@ -192,7 +192,7 @@ fn exited(pid: u32) -> bool {
 #[cfg(all(unix, target_os = "linux"))]
 #[tokio::test]
 async fn dropped_start_waiter_and_shutdown_still_kill_and_reap_native_startup() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     let mark = root.path().join("pid");
@@ -223,7 +223,7 @@ async fn dropped_start_waiter_and_shutdown_still_kill_and_reap_native_startup() 
 #[cfg(all(unix, target_os = "linux"))]
 #[tokio::test]
 async fn canceled_prepare_waiter_and_shutdown_wait_for_preparation_native_cleanup() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     let mark = root.path().join("pid");
@@ -271,7 +271,7 @@ async fn stop_kills_worker_descendants_before_reply() {
         return;
     }
     nix::sys::prctl::set_child_subreaper(true).unwrap();
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     let mark = root.path().join("pid");
@@ -311,7 +311,7 @@ async fn stop_kills_worker_descendants_before_reply() {
 #[cfg(unix)]
 #[tokio::test]
 async fn cleanup_fault_retains_native_ownership_for_public_stop_retry() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     manager
@@ -346,7 +346,7 @@ async fn cleanup_fault_retains_native_ownership_for_public_stop_retry() {
 #[cfg(unix)]
 #[tokio::test]
 async fn failed_commands_and_requests_do_not_poison_reclaimed_admission() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     for _ in 0..CAPACITY * 2 {
         let handle = manager.reserve().await.unwrap();
@@ -390,7 +390,7 @@ async fn failed_commands_and_requests_do_not_poison_reclaimed_admission() {
 #[cfg(unix)]
 #[tokio::test]
 async fn invalid_plans_and_requests_never_begin_native_work() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let unknown = WorkerHandle("foreign:1".into());
     assert_eq!(
@@ -488,7 +488,7 @@ async fn invalid_plans_and_requests_never_begin_native_work() {
 #[cfg(unix)]
 #[tokio::test]
 async fn malformed_startup_and_oversized_response_fail_without_sensitive_diagnostics() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     for source in [
         "printf '%s\\n' 'private malformed payload'",
@@ -532,7 +532,7 @@ async fn malformed_startup_and_oversized_response_fail_without_sensitive_diagnos
 #[cfg(unix)]
 #[tokio::test]
 async fn explicit_preparation_steps_drain_both_pipes_and_fail_bounded_overflow() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     for (script, expected) in [
         ("printf a; printf b >&2", WorkerOutcomeKind::Complete),
@@ -570,7 +570,7 @@ async fn explicit_preparation_steps_drain_both_pipes_and_fail_bounded_overflow()
 #[cfg(all(unix, target_os = "linux"))]
 #[tokio::test]
 async fn dropping_the_last_manager_signals_and_reaps_native_ownership() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     let mark = root.path().join("pid");
@@ -596,7 +596,7 @@ async fn dropping_the_last_manager_signals_and_reaps_native_ownership() {
 #[cfg(unix)]
 #[tokio::test]
 async fn total_junk_response_output_is_bounded_even_when_each_frame_fits() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     let source = "printf '%s\\n' '{\"ready\":true,\"protocol\":1}'; read line; for n in 1 2 3 4 5 6; do head -c 200000 /dev/zero | tr '\\000' x; printf '\\n'; done";
@@ -621,7 +621,7 @@ async fn total_junk_response_output_is_bounded_even_when_each_frame_fits() {
 #[cfg(unix)]
 #[tokio::test]
 async fn successful_request_idle_expiry_restarts_and_preserves_backend_order() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     let mut launch = plan(HEALTHY);
@@ -670,7 +670,7 @@ async fn successful_request_idle_expiry_restarts_and_preserves_backend_order() {
 #[cfg(unix)]
 #[tokio::test]
 async fn failed_request_restarts_once_without_translating_the_jsonl_method() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     let mark = root.path().join("first-worker");
@@ -703,7 +703,7 @@ async fn failed_request_restarts_once_without_translating_the_jsonl_method() {
 #[cfg(unix)]
 #[tokio::test]
 async fn request_deadline_during_idle_cleanup_keeps_stop_and_shutdown_waiting() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     let mut launch = plan(HEALTHY);
@@ -776,7 +776,7 @@ async fn request_deadline_during_idle_cleanup_keeps_stop_and_shutdown_waiting() 
 #[cfg(unix)]
 #[tokio::test]
 async fn unapproved_cache_scope_is_rejected_before_creating_any_cache_data() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().join("workers"));
     let handle = manager.reserve().await.unwrap();
     let result = manager
@@ -804,7 +804,7 @@ async fn unapproved_cache_scope_is_rejected_before_creating_any_cache_data() {
 
 #[tokio::test(start_paused = true)]
 async fn expired_reservations_are_closed_without_new_admission() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     tokio::time::advance(RESERVATION_LIFETIME).await;
@@ -819,7 +819,7 @@ async fn expired_reservations_are_closed_without_new_admission() {
 #[tokio::test]
 async fn prepared_script_and_directory_are_private() {
     use std::os::unix::fs::PermissionsExt;
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     let directory = root.path().join(handle.0.replace(':', "_"));
@@ -859,7 +859,7 @@ async fn prepared_script_and_directory_are_private() {
 #[cfg(unix)]
 #[tokio::test]
 async fn queued_expiry_does_not_poison_a_same_operation_retry() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     manager
@@ -896,7 +896,7 @@ async fn queued_expiry_does_not_poison_a_same_operation_retry() {
 #[cfg(unix)]
 #[tokio::test]
 async fn exited_worker_is_detected_without_a_request() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     let exit = root.path().join("exit");
@@ -935,7 +935,7 @@ async fn exited_worker_is_detected_without_a_request() {
 #[cfg(unix)]
 #[tokio::test]
 async fn directory_cleanup_retries_without_another_stop_signal() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     manager
@@ -966,7 +966,7 @@ async fn directory_cleanup_retries_without_another_stop_signal() {
 #[cfg(unix)]
 #[tokio::test]
 async fn prepared_worker_reports_configured_backends_before_start() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     let mut launch = plan(HEALTHY);
@@ -1010,8 +1010,8 @@ async fn prepared_worker_reports_configured_backends_before_start() {
 async fn preparation_rejects_linked_and_special_script_entries_without_outside_writes() {
     use std::os::unix::fs::PermissionsExt;
     for entry in ["symlink", "hardlink", "fifo", "directory"] {
-        let root = tempfile::tempdir().unwrap();
-        let outside = tempfile::tempdir().unwrap();
+        let root = crate::worker::test_tempdir().unwrap();
+        let outside = crate::worker::test_tempdir().unwrap();
         let target = outside.path().join("untouched");
         std::fs::write(&target, "outside content").unwrap();
         std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o640)).unwrap();
@@ -1067,7 +1067,7 @@ async fn preparation_rejects_linked_and_special_script_entries_without_outside_w
 #[cfg(unix)]
 #[tokio::test]
 async fn startup_failures_leave_the_same_operation_retryable() {
-    let root = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
     let source = format!(
@@ -1113,8 +1113,8 @@ async fn startup_failures_leave_the_same_operation_retryable() {
 #[tokio::test]
 async fn preparation_rejects_a_linked_worker_directory_without_outside_changes() {
     use std::os::unix::fs::PermissionsExt;
-    let root = tempfile::tempdir().unwrap();
-    let outside = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
+    let outside = crate::worker::test_tempdir().unwrap();
     std::fs::set_permissions(outside.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
     let manager = WorkerManager::new(root.path().to_path_buf());
     let handle = manager.reserve().await.unwrap();
@@ -1146,8 +1146,8 @@ async fn preparation_rejects_a_linked_worker_directory_without_outside_changes()
 #[cfg(unix)]
 #[tokio::test]
 async fn startup_uses_the_prepared_directory_after_path_replacement() {
-    let root = tempfile::tempdir().unwrap();
-    let outside = tempfile::tempdir().unwrap();
+    let root = crate::worker::test_tempdir().unwrap();
+    let outside = crate::worker::test_tempdir().unwrap();
     std::fs::write(
         outside.path().join("worker-script"),
         "touch attacked; exit 1",
