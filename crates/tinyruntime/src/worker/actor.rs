@@ -262,8 +262,8 @@ impl Actor {
         {
             use std::os::unix::fs::PermissionsExt;
             directory
-                .try_clone()?
-                .into_std_file()
+                .open(".")?
+                .into_std()
                 .set_permissions(std::fs::Permissions::from_mode(0o700))?;
         }
         self.directory = Some(directory.try_clone()?);

@@ -277,5 +277,12 @@ mod tests;
 pub(super) fn open_worker_directory(
     path: &std::path::Path,
 ) -> Result<cap_std::fs::Dir, &'static str> {
-    filesystem::absolute(path, true)
+    let path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|_| "worker_directory_failed")?
+            .join(path)
+    };
+    filesystem::absolute(&path, true)
 }

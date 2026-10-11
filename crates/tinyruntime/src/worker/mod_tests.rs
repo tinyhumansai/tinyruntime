@@ -1142,3 +1142,42 @@ async fn preparation_rejects_a_linked_worker_directory_without_outside_changes()
     );
     manager.shutdown().await;
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn startup_uses_the_prepared_directory_after_path_replacement() {
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::write(
+        outside.path().join("worker-script"),
+        "touch attacked; exit 1",
+    )
+    .unwrap();
+    let manager = WorkerManager::new(root.path().to_path_buf());
+    let handle = manager.reserve().await.unwrap();
+    assert_eq!(
+        manager
+            .prepare(WorkerPrepare {
+                handle: handle.clone(),
+                plan: plan(HEALTHY)
+            })
+            .await
+            .kind,
+        WorkerOutcomeKind::Complete
+    );
+    let path = root.path().join(handle.0.replace(':', "_"));
+    let held = root.path().join("held-directory");
+    std::fs::rename(&path, &held).unwrap();
+    std::os::unix::fs::symlink(outside.path(), &path).unwrap();
+    let result = manager
+        .request(WorkerRequest {
+            handle,
+            operation: 1,
+            method: "alpha.run".into(),
+            params: serde_json::Value::Null,
+        })
+        .await;
+    assert_eq!(result.kind, WorkerOutcomeKind::Response);
+    assert!(!outside.path().join("attacked").exists());
+    manager.shutdown().await;
+}
