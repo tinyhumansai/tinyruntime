@@ -843,11 +843,23 @@ async fn cached_worker_member_publishes_exact_marker_bytes() -> TinyBusResult<()
 async fn worker_bus_errors_preserve_retry_and_identity_classifications() {
     let service = RuntimeService {
         workers: crate::worker::WorkerManager::new(std::path::PathBuf::from("unused-test-root")),
-        engine: std::sync::Arc::new(Engine::new(Registry::new(), reqwest::Client::new(), std::path::PathBuf::from("unused-test-root"))),
+        engine: std::sync::Arc::new(Engine::new(
+            Registry::new(),
+            reqwest::Client::new(),
+            std::path::PathBuf::from("unused-test-root"),
+        )),
     };
-    for _ in 0..16 { service.worker_reserve().await.unwrap(); }
-    assert!(matches!(service.worker_reserve().await.unwrap_err(), tinybus::Error::MethodFailed {name, message} if name.ends_with(".Busy") && message == "worker_capacity"));
-    assert!(matches!(service.worker_status(tinyruntime_bus::worker::WorkerHandle("foreign".into())).await.unwrap_err(), tinybus::Error::MethodFailed {name, ..} if name.ends_with(".Unknown")));
+    for _ in 0..16 {
+        service.worker_reserve().await.unwrap();
+    }
+    assert!(
+        matches!(service.worker_reserve().await.unwrap_err(), tinybus::Error::MethodFailed {name, message} if name.ends_with(".Busy") && message == "worker_capacity")
+    );
+    assert!(
+        matches!(service.worker_status(tinyruntime_bus::worker::WorkerHandle("foreign".into())).await.unwrap_err(), tinybus::Error::MethodFailed {name, ..} if name.ends_with(".Unknown"))
+    );
     service.workers.shutdown().await;
-    assert!(matches!(service.worker_reserve().await.unwrap_err(), tinybus::Error::MethodFailed {name, message} if name.ends_with(".Closed") && message == "manager_shutdown"));
+    assert!(
+        matches!(service.worker_reserve().await.unwrap_err(), tinybus::Error::MethodFailed {name, message} if name.ends_with(".Closed") && message == "manager_shutdown")
+    );
 }

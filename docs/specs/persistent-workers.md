@@ -51,3 +51,8 @@ descriptor advertises `prepare_environment`; it returns native setup commands
 and the prepared executable without executing them. Each command can carry an
 optional deadline. Four hours bounds a whole cache recipe and thirty minutes
 bounds each individual command.
+
+`WorkerReserve` and `WorkerStatus` encode manager errors in bus names
+`ai.tinyhumans.runtime.Error.Worker.<Classification>` (for example `Busy`,
+`Closed` or `Unknown`), with the bounded machine reason as the error message.
+Hosts can distinguish retryable admission from terminal shutdown or foreign IDs.

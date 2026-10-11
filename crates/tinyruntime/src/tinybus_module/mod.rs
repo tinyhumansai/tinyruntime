@@ -83,10 +83,7 @@ impl RuntimeService {
     }
     /// Reserve a known handle before worker side effects.
     async fn worker_reserve(&self) -> TinyBusResult<tinyruntime_bus::worker::WorkerHandle> {
-        self.workers
-            .reserve()
-            .await
-            .map_err(|_| tinybus::Error::failed("worker_reservation_unavailable"))
+        self.workers.reserve().await.map_err(worker_failed)
     }
 
     /// Install an immutable trusted plan under its known reservation.
@@ -126,10 +123,7 @@ impl RuntimeService {
         &self,
         handle: tinyruntime_bus::worker::WorkerHandle,
     ) -> TinyBusResult<tinyruntime_bus::worker::WorkerStatus> {
-        self.workers
-            .status(&handle)
-            .await
-            .map_err(|_| tinybus::Error::failed("worker_handle_closed"))
+        self.workers.status(&handle).await.map_err(worker_failed)
     }
 
     /// Cancel and reap native ownership before acknowledgement.
@@ -143,6 +137,25 @@ impl RuntimeService {
     /// Terminal barrier required before ABI unload.
     async fn worker_shutdown(&self) -> TinyBusResult<tinyruntime_bus::worker::WorkerOutcome> {
         Ok(self.workers.shutdown().await)
+    }
+}
+
+/// Preserve retry/terminal/identity policy in the bus error name.
+fn worker_failed(outcome: tinyruntime_bus::worker::WorkerOutcome) -> tinybus::Error {
+    use tinyruntime_bus::worker::WorkerOutcomeKind;
+    let classification = match outcome.kind {
+        WorkerOutcomeKind::Complete => "Complete",
+        WorkerOutcomeKind::Response => "Response",
+        WorkerOutcomeKind::Closed => "Closed",
+        WorkerOutcomeKind::Busy => "Busy",
+        WorkerOutcomeKind::Invalid => "Invalid",
+        WorkerOutcomeKind::Unknown => "Unknown",
+        WorkerOutcomeKind::Expired => "Expired",
+        WorkerOutcomeKind::Failed => "Failed",
+    };
+    tinybus::Error::MethodFailed {
+        name: format!("ai.tinyhumans.runtime.Error.Worker.{classification}"),
+        message: outcome.reason.unwrap_or_default(),
     }
 }
 

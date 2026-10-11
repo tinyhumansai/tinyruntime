@@ -56,6 +56,7 @@ pub struct ServerError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerResponse {
     /// The `id` of the request this answers, if the worker could tell.
+    #[serde(default)]
     pub id: Option<String>,
     /// Whether the request succeeded.
     #[serde(default)]
