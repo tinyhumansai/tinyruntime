@@ -147,3 +147,13 @@ fn the_whole_deadline_can_cover_every_legacy_provisioning_step() {
     value.timeout_ms = 7_320_000;
     assert!(recipe(&value).is_ok());
 }
+
+#[test]
+fn credential_pairs_and_case_aliases_are_rejected() {
+    for path in [".config/gcloud/credentials.db", ".CONFIG/GCLOUD/token", ".TINYRUNTIME-stage-x/file"] {
+        assert!(relative(path).is_err(), "{path}");
+    }
+    for root in ["/home/u/.config/gcloud", "/home/u/.CONFIG/GCLOUD"] {
+        assert!(scope(&WorkerCacheScope { id: "approved".into(), root: root.into() }).is_err());
+    }
+}

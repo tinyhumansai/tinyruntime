@@ -784,3 +784,13 @@ async fn unapproved_cache_scope_is_rejected_before_creating_any_cache_data() {
     assert!(!root.path().join("workers").exists());
     manager.stop(&handle).await;
 }
+
+#[tokio::test(start_paused = true)]
+async fn expired_reservations_are_closed_without_new_admission() {
+    let root = tempfile::tempdir().unwrap();
+    let manager = WorkerManager::new(root.path().to_path_buf());
+    let handle = manager.reserve().await.unwrap();
+    tokio::time::advance(RESERVATION_LIFETIME).await;
+    assert_eq!(manager.status(&handle).await.unwrap_err().kind, WorkerOutcomeKind::Closed);
+    assert_eq!(manager.start(&handle).await.kind, WorkerOutcomeKind::Closed);
+}

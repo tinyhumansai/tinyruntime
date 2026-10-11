@@ -226,3 +226,10 @@ async fn canceled_preparation_cleanup_keeps_the_original_group_wait_owned() {
     process.cleanup().await.unwrap();
     await_reaped(pid).await;
 }
+
+#[tokio::test]
+async fn rejects_an_exact_limit_unterminated_frame_without_waiting() {
+    let input = vec![b'x'; MAX_LINE];
+    let mut reader = BufReader::new(input.as_slice());
+    assert_eq!(line(&mut reader).await.unwrap_err(), "frame_limit");
+}

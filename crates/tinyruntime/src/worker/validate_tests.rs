@@ -60,3 +60,14 @@ fn step_deadlines_are_bounded_independently() {
     command.timeout_ms = Some(30 * 60 * 1000 + 1);
     assert_eq!(super::command(&command), Err("command_limit"));
 }
+
+#[test]
+fn escaped_methods_are_counted_in_the_wire_frame() {
+    let request = WorkerRequest {
+        handle: tinyruntime_bus::worker::WorkerHandle("known".into()),
+        operation: 1,
+        method: "\\".repeat(256),
+        params: serde_json::Value::String("x".repeat(MAX_LINE - 500)),
+    };
+    assert_eq!(super::request(&request), Err("request_limit"));
+}
