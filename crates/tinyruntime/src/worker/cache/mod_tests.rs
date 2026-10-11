@@ -16,7 +16,10 @@ fn duplicate_and_overlapping_scope_admission_is_bounded() {
     assert!(scopes(&[scope.clone(), scope.clone()]).is_err());
     let mut nested = scope.clone();
     nested.id = "nested".into();
-    nested.root.push_str("/child");
+    nested.root = Path::new(&scope.root)
+        .join("child")
+        .to_string_lossy()
+        .into_owned();
     assert!(scopes(&[scope.clone(), nested]).is_err());
     assert!(scopes(&vec![scope; 33]).is_err());
 }
