@@ -1,5 +1,6 @@
 """Verify the shipped module archive layout without compiling native code."""
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -15,7 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 class PackageTests(unittest.TestCase):
     def test_verifier_extracts_module_into_private_home(self):
-        """Nested Docker verification must own the extracted module directory."""
+        """The verifier extracts the module archive under HOME."""
         target = ROOT / "target"; target.mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(dir=target) as directory:
             root = Path(directory); home = root / "home"; home.mkdir()
@@ -24,7 +25,6 @@ class PackageTests(unittest.TestCase):
                 library = "libtinyruntime.dylib" if sys.platform == "darwin" else "libtinyruntime.so"
                 for name, data in [(library, b"fixture"), ("modules.toml", b"fixture = true\n")]:
                     info = tarfile.TarInfo(name); info.size = len(data)
-                    import io
                     package.addfile(info, io.BytesIO(data))
             bin_dir = root / "bin"; bin_dir.mkdir()
             cargo = bin_dir / "cargo"
