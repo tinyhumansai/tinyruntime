@@ -87,3 +87,7 @@ pub fn confine(spawner: Option<&SharedSpawner>, spec: SpawnSpec) -> Result<Spawn
         None => Ok(spec),
     }
 }
+
+#[cfg(test)]
+#[path = "spawner_tests.rs"]
+mod tests;
