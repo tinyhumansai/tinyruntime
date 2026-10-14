@@ -233,3 +233,72 @@ async fn rejects_an_exact_limit_unterminated_frame_without_waiting() {
     let mut reader = BufReader::new(input.as_slice());
     assert_eq!(line(&mut reader).await.unwrap_err(), "frame_limit");
 }
+
+#[derive(Debug)]
+struct Gate {
+    refuse: bool,
+    calls: AtomicUsize,
+}
+
+impl crate::pool::Spawner for Gate {
+    fn id(&self) -> &str {
+        "gate"
+    }
+
+    fn confine(&self, spec: SpawnSpec) -> Result<SpawnSpec, crate::pool::SpawnRefused> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        if self.refuse {
+            Err(crate::pool::SpawnRefused("denied".into()))
+        } else {
+            Ok(spec)
+        }
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_refusing_spawner_fails_the_native_spawn_without_a_direct_fallback() {
+    let root = crate::worker::test_tempdir().unwrap();
+    let marker = root.path().join("ran");
+    let command = WorkerCommand {
+        executable: "/bin/sh".into(),
+        args: vec!["-c".into(), format!("touch {}", marker.display())],
+        env: Vec::new(),
+        timeout_ms: None,
+    };
+    let gate = std::sync::Arc::new(Gate {
+        refuse: true,
+        calls: AtomicUsize::new(0),
+    });
+    let spawner: SharedSpawner = gate.clone();
+    assert_eq!(
+        Preparation::spawn(&command, root.path(), None, Some(&spawner)).err(),
+        Some("prepare_spawn_failed")
+    );
+    assert_eq!(
+        Process::spawn(&command, root.path(), Path::new("s"), None, Some(&spawner)).err(),
+        Some("spawn_failed")
+    );
+    assert_eq!(gate.calls.load(Ordering::SeqCst), 2);
+    assert!(!marker.exists(), "a refused spawn must start nothing");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_permitting_spawner_sees_the_final_native_spec() {
+    let root = crate::worker::test_tempdir().unwrap();
+    let command = WorkerCommand {
+        executable: "/bin/sh".into(),
+        args: vec!["-c".into(), "exit 0".into()],
+        env: Vec::new(),
+        timeout_ms: None,
+    };
+    let gate = std::sync::Arc::new(Gate {
+        refuse: false,
+        calls: AtomicUsize::new(0),
+    });
+    let spawner: SharedSpawner = gate.clone();
+    let preparation = Preparation::spawn(&command, root.path(), None, Some(&spawner)).unwrap();
+    drop(preparation);
+    assert_eq!(gate.calls.load(Ordering::SeqCst), 1);
+}
