@@ -16,6 +16,7 @@
 
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, Lines};
@@ -25,6 +26,7 @@ use tokio::process::{Child, Command};
 use tinyruntime_bus::Language;
 
 use super::protocol::{Handshake, JobRequest, JobResponse};
+use super::spawner::{self, SharedSpawner, SpawnSpec, Spawner};
 
 /// How long a freshly spawned worker has to complete its handshake by default.
 ///
@@ -49,9 +51,20 @@ pub struct Launch {
     pub protocol_version: u32,
     /// How long the worker has to connect back and hand over its handshake.
     pub handshake_timeout: Duration,
+    /// How the host confines the worker process. `None` launches it directly;
+    /// `Some` runs every spawn through the host's [`Spawner`] and fails closed
+    /// when it refuses.
+    pub spawner: Option<SharedSpawner>,
 }
 
 impl Launch {
+    /// This launch with `spawner` confining every worker it starts.
+    #[must_use]
+    pub fn with_spawner(mut self, spawner: Arc<dyn Spawner>) -> Self {
+        self.spawner = Some(spawner);
+        self
+    }
+
     /// A fingerprint that decides whether a running pool can serve this launch.
     ///
     /// Changing the interpreter, its flags, or its environment means the warm
@@ -64,12 +77,13 @@ impl Launch {
         // rebuilding a healthy pool over it would discard warm workers for
         // nothing.
         format!(
-            "{}|{}|{:?}|{:?}|{}",
+            "{}|{}|{:?}|{:?}|{}|spawner={}",
             self.language.as_str(),
             self.binary.display(),
             self.args,
             self.env,
-            self.protocol_version
+            self.protocol_version,
+            self.spawner.as_ref().map_or("direct", |spawner| spawner.id())
         )
     }
 }
@@ -157,14 +171,29 @@ impl Worker {
             .map_err(|error| format!("the worker protocol address could not be read: {error}"))?;
         let token = uuid::Uuid::new_v4().to_string();
 
-        let mut command = Command::new(&launch.binary);
-        command.args(&launch.args);
-        command.env_clear();
-        for (name, value) in &launch.env {
-            command.env(name, value);
-        }
-        command.env("TINYRUNTIME_PROTOCOL_ADDR", address.to_string());
-        command.env("TINYRUNTIME_PROTOCOL_TOKEN", &token);
+        let mut env = launch.env.clone();
+        env.push((
+            "TINYRUNTIME_PROTOCOL_ADDR".to_string(),
+            address.to_string(),
+        ));
+        env.push(("TINYRUNTIME_PROTOCOL_TOKEN".to_string(), token.clone()));
+        let spec = spawner::confine(
+            launch.spawner.as_ref(),
+            SpawnSpec {
+                program: launch.binary.clone(),
+                args: launch.args.clone(),
+                env,
+                clear_env: true,
+            },
+        )
+        .map_err(|error| {
+            tracing::warn!(
+                language = launch.language.as_str(),
+                "[tinyruntime::pool] spawn refused: {error}"
+            );
+            format!("the worker could not be started: {error}")
+        })?;
+        let mut command = spec.to_command();
         // A job inherits end-of-file on standard input, matching what a
         // one-shot child would see, rather than a pipe it could read the next
         // request out of.

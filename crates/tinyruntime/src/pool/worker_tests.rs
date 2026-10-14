@@ -16,6 +16,7 @@ fn launch() -> Launch {
         env: vec![("PATH".to_string(), "/usr/bin".to_string())],
         protocol_version: 1,
         handshake_timeout: Duration::from_secs(30),
+        spawner: None,
     }
 }
 
