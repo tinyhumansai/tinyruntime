@@ -33,9 +33,11 @@ pub mod env;
 pub(crate) mod fake_worker;
 pub(crate) mod lang_pool;
 pub mod protocol;
+pub mod spawner;
 pub mod worker;
 
 pub use lang_pool::LangPool;
+pub use spawner::{SharedSpawner, SpawnRefused, SpawnSpec, Spawner};
 pub use worker::{Launch, Worker};
 
 /// The live pools, one per language.

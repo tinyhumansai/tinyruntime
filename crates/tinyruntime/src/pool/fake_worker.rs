@@ -134,6 +134,7 @@ pub(crate) fn launch(language: tinyruntime_bus::Language) -> Launch {
         env,
         protocol_version: tinyruntime_bus::WORKER_PROTOCOL_VERSION,
         handshake_timeout: std::time::Duration::from_secs(20),
+        spawner: None,
     }
 }
 

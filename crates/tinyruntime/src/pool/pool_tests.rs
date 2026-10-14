@@ -14,6 +14,7 @@ fn launch(language: Language) -> Launch {
         env: Vec::new(),
         protocol_version: 1,
         handshake_timeout: std::time::Duration::from_secs(30),
+        spawner: None,
     }
 }
 

@@ -18,7 +18,7 @@ use tinyruntime_bus::{
 };
 
 use crate::error::{Error, Result};
-use crate::pool::{Launch, Pools, env};
+use crate::pool::{Launch, Pools, SharedSpawner, env};
 use crate::provider::Registry;
 use crate::resolve::Resolver;
 
@@ -33,6 +33,8 @@ pub struct Engine {
     pools: Pools,
     /// Where worker harnesses are written.
     harness_root: PathBuf,
+    /// The host's confinement for every worker this engine starts.
+    spawner: Option<SharedSpawner>,
 }
 
 impl Engine {
@@ -43,7 +45,17 @@ impl Engine {
             resolver: Resolver::new(registry, client),
             pools: Pools::new(),
             harness_root,
+            spawner: None,
         }
+    }
+
+    /// Launch every worker this engine starts through the host's spawner.
+    ///
+    /// A refusal fails the spawn; there is no direct fallback.
+    #[must_use]
+    pub fn with_spawner(mut self, spawner: SharedSpawner) -> Self {
+        self.spawner = Some(spawner);
+        self
     }
 
     /// The routing table this engine routes over.
@@ -128,6 +140,7 @@ impl Engine {
             env,
             protocol_version: harness.protocol_version,
             handshake_timeout: crate::pool::worker::DEFAULT_HANDSHAKE_TIMEOUT,
+            spawner: self.spawner.clone(),
         })
     }
 }

@@ -55,7 +55,7 @@ async fn a_step_timeout_kills_and_joins_its_native_process_group() {
         env: Vec::new(),
         timeout_ms: Some(30),
     };
-    let mut preparation = Preparation::spawn(&command, root.path(), None).unwrap();
+    let mut preparation = Preparation::spawn(&command, root.path(), None, None).unwrap();
     let pid = preparation.child.as_ref().unwrap().id().unwrap();
     let (_stop, mut stop) = watch::channel(false);
     let deadline = command_deadline(
@@ -107,7 +107,7 @@ async fn dropping_native_ownership_signals_and_awaits_reaping_on_the_live_runtim
         env: Vec::new(),
         timeout_ms: None,
     };
-    let mut process = Process::spawn(&command, root.path(), &script, None).unwrap();
+    let mut process = Process::spawn(&command, root.path(), &script, None, None).unwrap();
     let pid = process.child.as_ref().unwrap().id().unwrap();
     process.handshake().await.unwrap();
     drop(process);
@@ -118,7 +118,7 @@ async fn dropping_native_ownership_signals_and_awaits_reaping_on_the_live_runtim
         env: Vec::new(),
         timeout_ms: None,
     };
-    let preparation = Preparation::spawn(&command, root.path(), None).unwrap();
+    let preparation = Preparation::spawn(&command, root.path(), None, None).unwrap();
     let pid = preparation.child.as_ref().unwrap().id().unwrap();
     drop(preparation);
     await_reaped(pid).await;
@@ -148,7 +148,7 @@ async fn canceled_cleanup_wait_retains_reaping_until_a_later_cleanup_finishes() 
         env: Vec::new(),
         timeout_ms: None,
     };
-    let mut process = Process::spawn(&command, root.path(), &script, None).unwrap();
+    let mut process = Process::spawn(&command, root.path(), &script, None, None).unwrap();
     let pid = process.child.as_ref().unwrap().id().unwrap();
     process.handshake().await.unwrap();
     // Isolate native reaping from the separately tested stderr join.
@@ -196,7 +196,7 @@ async fn canceled_preparation_cleanup_keeps_the_original_group_wait_owned() {
         env: Vec::new(),
         timeout_ms: None,
     };
-    let mut process = Preparation::spawn(&command, root.path(), None).unwrap();
+    let mut process = Preparation::spawn(&command, root.path(), None, None).unwrap();
     let pid = process.child.as_ref().unwrap().id().unwrap();
     let entered = std::sync::Arc::new(tokio::sync::Notify::new());
     let release = std::sync::Arc::new(tokio::sync::Notify::new());
@@ -232,4 +232,73 @@ async fn rejects_an_exact_limit_unterminated_frame_without_waiting() {
     let input = vec![b'x'; MAX_LINE];
     let mut reader = BufReader::new(input.as_slice());
     assert_eq!(line(&mut reader).await.unwrap_err(), "frame_limit");
+}
+
+#[derive(Debug)]
+struct Gate {
+    refuse: bool,
+    calls: AtomicUsize,
+}
+
+impl crate::pool::Spawner for Gate {
+    fn id(&self) -> &'static str {
+        "gate"
+    }
+
+    fn confine(&self, spec: SpawnSpec) -> Result<SpawnSpec, crate::pool::SpawnRefused> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        if self.refuse {
+            Err(crate::pool::SpawnRefused("denied".into()))
+        } else {
+            Ok(spec)
+        }
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_refusing_spawner_fails_the_native_spawn_without_a_direct_fallback() {
+    let root = crate::worker::test_tempdir().unwrap();
+    let marker = root.path().join("ran");
+    let command = WorkerCommand {
+        executable: "/bin/sh".into(),
+        args: vec!["-c".into(), format!("touch {}", marker.display())],
+        env: Vec::new(),
+        timeout_ms: None,
+    };
+    let gate = std::sync::Arc::new(Gate {
+        refuse: true,
+        calls: AtomicUsize::new(0),
+    });
+    let spawner: SharedSpawner = gate.clone();
+    assert_eq!(
+        Preparation::spawn(&command, root.path(), None, Some(&spawner)).err(),
+        Some("prepare_spawn_failed")
+    );
+    assert_eq!(
+        Process::spawn(&command, root.path(), Path::new("s"), None, Some(&spawner)).err(),
+        Some("spawn_failed")
+    );
+    assert_eq!(gate.calls.load(Ordering::SeqCst), 2);
+    assert!(!marker.exists(), "a refused spawn must start nothing");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_permitting_spawner_sees_the_final_native_spec() {
+    let root = crate::worker::test_tempdir().unwrap();
+    let command = WorkerCommand {
+        executable: "/bin/sh".into(),
+        args: vec!["-c".into(), "exit 0".into()],
+        env: Vec::new(),
+        timeout_ms: None,
+    };
+    let gate = std::sync::Arc::new(Gate {
+        refuse: false,
+        calls: AtomicUsize::new(0),
+    });
+    let spawner: SharedSpawner = gate.clone();
+    let preparation = Preparation::spawn(&command, root.path(), None, Some(&spawner)).unwrap();
+    drop(preparation);
+    assert_eq!(gate.calls.load(Ordering::SeqCst), 1);
 }

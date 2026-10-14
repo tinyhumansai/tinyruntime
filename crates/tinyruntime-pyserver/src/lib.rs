@@ -21,6 +21,8 @@
 //!   with a five-minute back-off after a failed start.
 //! * [`ServerLaunch`] is everything the host decides: interpreter, script,
 //!   backends, environment, timeouts.
+//! * [`Spawner`] is the host's seam to confine the worker process (a `TinyBox`
+//!   plan, a jail); a refusal fails the start with no direct fallback.
 //! * [`SERVER_SCRIPT`] and [`write_script`] are the worker itself, embedded so
 //!   its protocol revision always matches this crate's.
 //! * [`protocol`] and [`ServerStatus`] are the wire and status types.
@@ -38,6 +40,7 @@ pub mod protocol;
 mod script;
 mod server;
 mod slot;
+mod spawner;
 mod status;
 #[cfg(test)]
 mod testing;
@@ -48,4 +51,5 @@ pub use protocol::PROTOCOL_VERSION;
 pub use script::{SCRIPT_FILE_NAME, SERVER_SCRIPT, write_script};
 pub use server::PythonServer;
 pub use slot::{IdleRule, START_FAILURE_BACKOFF, ServerSlot};
+pub use spawner::{SharedSpawner, SpawnRefused, SpawnSpec, Spawner, confine};
 pub use status::{BackendStatus, ServerStatus};
