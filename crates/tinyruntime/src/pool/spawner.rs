@@ -75,7 +75,10 @@ pub type SharedSpawner = Arc<dyn Spawner>;
 /// # Errors
 ///
 /// Returns [`SpawnRefused`] when the installed spawner refuses.
-pub fn confine(spawner: Option<&SharedSpawner>, spec: SpawnSpec) -> Result<SpawnSpec, SpawnRefused> {
+pub fn confine(
+    spawner: Option<&SharedSpawner>,
+    spec: SpawnSpec,
+) -> Result<SpawnSpec, SpawnRefused> {
     match spawner {
         Some(spawner) => {
             tracing::debug!(

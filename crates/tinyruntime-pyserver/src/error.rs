@@ -24,6 +24,9 @@ pub enum Error {
         /// The operating system's reason.
         source: io::Error,
     },
+    /// The host's spawner refused to start the interpreter.
+    #[error("spawning runtime python server: {0}")]
+    SpawnRefused(#[from] crate::spawner::SpawnRefused),
     /// The child had no stdin pipe.
     #[error("runtime python server stdin missing")]
     StdinMissing,

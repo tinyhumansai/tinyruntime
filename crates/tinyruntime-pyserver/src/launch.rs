@@ -1,7 +1,10 @@
 //! Everything a host decides before a worker is started.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
+
+use crate::spawner::{SharedSpawner, Spawner};
 
 /// How long a freshly spawned worker has to print its ready line.
 pub const DEFAULT_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -32,6 +35,9 @@ pub struct ServerLaunch {
     pub handshake_timeout: Duration,
     /// How long a single request may wait for its response.
     pub request_timeout: Duration,
+    /// How the host confines the worker. `None` launches it directly; `Some`
+    /// runs the spawn through the host's [`Spawner`] and fails closed on refusal.
+    pub spawner: Option<SharedSpawner>,
 }
 
 impl ServerLaunch {
@@ -50,6 +56,14 @@ impl ServerLaunch {
             env,
             handshake_timeout: DEFAULT_HANDSHAKE_TIMEOUT,
             request_timeout: DEFAULT_REQUEST_TIMEOUT,
+            spawner: None,
         }
+    }
+
+    /// This launch with `spawner` confining the worker process.
+    #[must_use]
+    pub fn with_spawner(mut self, spawner: Arc<dyn Spawner>) -> Self {
+        self.spawner = Some(spawner);
+        self
     }
 }

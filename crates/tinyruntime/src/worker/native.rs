@@ -349,8 +349,8 @@ impl Preparation {
         directory: Option<&cap_std::fs::Dir>,
         spawner: Option<&SharedSpawner>,
     ) -> Result<Self, &'static str> {
-        let mut cmd = command(plan, root, directory, spawner, None)
-            .map_err(|_| "prepare_spawn_failed")?;
+        let mut cmd =
+            command(plan, root, directory, spawner, None).map_err(|_| "prepare_spawn_failed")?;
         cmd.stdin(Stdio::null());
         let mut child = cmd
             .group()

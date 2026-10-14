@@ -83,7 +83,9 @@ impl Launch {
             self.args,
             self.env,
             self.protocol_version,
-            self.spawner.as_ref().map_or("direct", |spawner| spawner.id())
+            self.spawner
+                .as_ref()
+                .map_or("direct", |spawner| spawner.id())
         )
     }
 }
@@ -172,10 +174,7 @@ impl Worker {
         let token = uuid::Uuid::new_v4().to_string();
 
         let mut env = launch.env.clone();
-        env.push((
-            "TINYRUNTIME_PROTOCOL_ADDR".to_string(),
-            address.to_string(),
-        ));
+        env.push(("TINYRUNTIME_PROTOCOL_ADDR".to_string(), address.to_string()));
         env.push(("TINYRUNTIME_PROTOCOL_TOKEN".to_string(), token.clone()));
         let spec = spawner::confine(
             launch.spawner.as_ref(),

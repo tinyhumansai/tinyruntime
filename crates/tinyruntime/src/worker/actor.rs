@@ -14,9 +14,9 @@ use tokio::sync::{mpsc, watch};
 use tokio::time::Instant;
 
 use super::cache::Session;
-use crate::pool::SharedSpawner;
 use super::native::{self, Preparation, Process};
 use super::{Cached, Command, State, outcome};
+use crate::pool::SharedSpawner;
 
 const REPLAY_WINDOW: u64 = 8;
 const BACKOFF: Duration = Duration::from_secs(300);
@@ -239,7 +239,12 @@ impl Actor {
             return outcome(WorkerOutcomeKind::Failed, Some("install_failed"));
         }
         for step in &self.plan.preparation {
-            match Preparation::spawn(step, &self.root, self.directory.as_ref(), self.spawner.as_ref()) {
+            match Preparation::spawn(
+                step,
+                &self.root,
+                self.directory.as_ref(),
+                self.spawner.as_ref(),
+            ) {
                 Ok(process) => self.preparation = Some(process),
                 Err(reason) => return outcome(WorkerOutcomeKind::Failed, Some(reason)),
             }

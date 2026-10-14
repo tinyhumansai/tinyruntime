@@ -18,6 +18,7 @@ use tokio::sync::Mutex;
 use crate::error::{Error, Result};
 use crate::launch::ServerLaunch;
 use crate::protocol::{PROTOCOL_VERSION, ReadyLine, ServerRequest, ServerResponse};
+use crate::spawner::SpawnSpec;
 use crate::status::{BackendStatus, ServerStatus};
 
 /// `CREATE_NO_WINDOW`, so Windows does not flash a console for the worker.
@@ -254,13 +255,19 @@ fn drain_stderr(stderr: ChildStderr) {
 }
 
 fn spawn_child(launch: &ServerLaunch) -> Result<Child> {
-    let mut cmd = Command::new(&launch.python_bin);
     // Unbuffered stdio, so a line-oriented protocol does not stall behind
-    // Python's output buffering.
-    cmd.arg("-u").arg(&launch.script_path);
-    for (key, value) in &launch.env {
-        cmd.env(key, value);
-    }
+    // Python's output buffering. The host's spawner, when installed, sees the
+    // final program, arguments and environment; a refusal starts nothing.
+    let spec = crate::spawner::confine(
+        launch.spawner.as_ref(),
+        SpawnSpec {
+            program: launch.python_bin.clone(),
+            args: vec!["-u".to_string(), launch.script_path.display().to_string()],
+            env: launch.env.clone(),
+            clear_env: false,
+        },
+    )?;
+    let mut cmd = spec.to_command();
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
