@@ -55,7 +55,7 @@ async fn a_step_timeout_kills_and_joins_its_native_process_group() {
         env: Vec::new(),
         timeout_ms: Some(30),
     };
-    let mut preparation = Preparation::spawn(&command, root.path(), None).unwrap();
+    let mut preparation = Preparation::spawn(&command, root.path(), None, None).unwrap();
     let pid = preparation.child.as_ref().unwrap().id().unwrap();
     let (_stop, mut stop) = watch::channel(false);
     let deadline = command_deadline(
@@ -107,7 +107,7 @@ async fn dropping_native_ownership_signals_and_awaits_reaping_on_the_live_runtim
         env: Vec::new(),
         timeout_ms: None,
     };
-    let mut process = Process::spawn(&command, root.path(), &script, None).unwrap();
+    let mut process = Process::spawn(&command, root.path(), &script, None, None).unwrap();
     let pid = process.child.as_ref().unwrap().id().unwrap();
     process.handshake().await.unwrap();
     drop(process);
@@ -118,7 +118,7 @@ async fn dropping_native_ownership_signals_and_awaits_reaping_on_the_live_runtim
         env: Vec::new(),
         timeout_ms: None,
     };
-    let preparation = Preparation::spawn(&command, root.path(), None).unwrap();
+    let preparation = Preparation::spawn(&command, root.path(), None, None).unwrap();
     let pid = preparation.child.as_ref().unwrap().id().unwrap();
     drop(preparation);
     await_reaped(pid).await;
@@ -148,7 +148,7 @@ async fn canceled_cleanup_wait_retains_reaping_until_a_later_cleanup_finishes() 
         env: Vec::new(),
         timeout_ms: None,
     };
-    let mut process = Process::spawn(&command, root.path(), &script, None).unwrap();
+    let mut process = Process::spawn(&command, root.path(), &script, None, None).unwrap();
     let pid = process.child.as_ref().unwrap().id().unwrap();
     process.handshake().await.unwrap();
     // Isolate native reaping from the separately tested stderr join.
@@ -196,7 +196,7 @@ async fn canceled_preparation_cleanup_keeps_the_original_group_wait_owned() {
         env: Vec::new(),
         timeout_ms: None,
     };
-    let mut process = Preparation::spawn(&command, root.path(), None).unwrap();
+    let mut process = Preparation::spawn(&command, root.path(), None, None).unwrap();
     let pid = process.child.as_ref().unwrap().id().unwrap();
     let entered = std::sync::Arc::new(tokio::sync::Notify::new());
     let release = std::sync::Arc::new(tokio::sync::Notify::new());

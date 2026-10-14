@@ -14,6 +14,7 @@ use tokio::sync::{mpsc, watch};
 use tokio::time::Instant;
 
 use super::cache::Session;
+use crate::pool::SharedSpawner;
 use super::native::{self, Preparation, Process};
 use super::{Cached, Command, State, outcome};
 
@@ -24,6 +25,7 @@ struct Actor {
     plan: Arc<WorkerPlan>,
     root: PathBuf,
     directory: Option<cap_std::fs::Dir>,
+    spawner: Option<SharedSpawner>,
     process: Option<Process>,
     preparation: Option<Preparation>,
     cached: Option<Cached>,
@@ -41,6 +43,7 @@ pub(super) async fn run(
     plan: Arc<WorkerPlan>,
     root: PathBuf,
     cached: Option<Cached>,
+    spawner: Option<SharedSpawner>,
     mut commands: mpsc::Receiver<Command>,
     stop: watch::Receiver<bool>,
     state: watch::Sender<State>,
@@ -49,6 +52,7 @@ pub(super) async fn run(
         plan,
         root,
         directory: None,
+        spawner,
         process: None,
         preparation: None,
         cached,
@@ -205,6 +209,7 @@ impl Actor {
                 step,
                 &cached.root,
                 self.cache.as_ref().map(Session::directory),
+                self.spawner.as_ref(),
             )?);
             let preparation = self.preparation.as_mut().ok_or("prepare_closed")?;
             let step_deadline = native::command_deadline(step, deadline);
@@ -234,7 +239,7 @@ impl Actor {
             return outcome(WorkerOutcomeKind::Failed, Some("install_failed"));
         }
         for step in &self.plan.preparation {
-            match Preparation::spawn(step, &self.root, self.directory.as_ref()) {
+            match Preparation::spawn(step, &self.root, self.directory.as_ref(), self.spawner.as_ref()) {
                 Ok(process) => self.preparation = Some(process),
                 Err(reason) => return outcome(WorkerOutcomeKind::Failed, Some(reason)),
             }
@@ -386,6 +391,7 @@ impl Actor {
             &self.root,
             std::path::Path::new("./worker-script"),
             self.directory.as_ref(),
+            self.spawner.as_ref(),
         ) {
             Ok(process) => {
                 self.process = Some(process);

@@ -12,6 +12,7 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
+use crate::pool::{SharedSpawner, SpawnSpec, spawner};
 use tinyruntime_bus::worker::{
     PROTOCOL_VERSION, ReadyLine, ServerRequest, ServerResponse, WorkerCommand,
 };
@@ -57,9 +58,30 @@ fn command(
     plan: &WorkerCommand,
     root: &Path,
     directory: Option<&cap_std::fs::Dir>,
+    spawner: Option<&SharedSpawner>,
+    trailing: Option<&Path>,
 ) -> std::io::Result<Command> {
-    let mut cmd = Command::new(&plan.executable);
-    cmd.args(&plan.args).env_clear();
+    let bin = Path::new(&plan.executable)
+        .parent()
+        .unwrap_or_else(|| Path::new("."));
+    let mut args = plan.args.clone();
+    if let Some(trailing) = trailing {
+        args.push(trailing.to_string_lossy().into_owned());
+    }
+    // The host's spawner sees the final program, arguments and environment and
+    // decides how the process is confined. A refusal fails the spawn: there is
+    // no direct fallback.
+    let spec = spawner::confine(
+        spawner,
+        SpawnSpec {
+            program: plan.executable.clone().into(),
+            args,
+            env: crate::pool::env::build(bin, &plan.env),
+            clear_env: true,
+        },
+    )
+    .map_err(|error| std::io::Error::new(std::io::ErrorKind::PermissionDenied, error))?;
+    let mut cmd = spec.to_command();
     #[cfg(unix)]
     if let Some(directory) = directory {
         tinyruntime_process::current_dir(cmd.as_std_mut(), directory)?;
@@ -71,10 +93,6 @@ fn command(
         let _ = directory;
         cmd.current_dir(root);
     }
-    let bin = Path::new(&plan.executable)
-        .parent()
-        .unwrap_or_else(|| Path::new("."));
-    cmd.envs(crate::pool::env::build(bin, &plan.env));
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -204,9 +222,10 @@ impl Process {
         root: &Path,
         script: &Path,
         directory: Option<&cap_std::fs::Dir>,
+        spawner: Option<&SharedSpawner>,
     ) -> Result<Self, &'static str> {
-        let mut cmd = command(plan, root, directory).map_err(|_| "spawn_failed")?;
-        cmd.arg(script);
+        let mut cmd =
+            command(plan, root, directory, spawner, Some(script)).map_err(|_| "spawn_failed")?;
         let mut child = cmd
             .group()
             .kill_on_drop(true)
@@ -328,8 +347,10 @@ impl Preparation {
         plan: &WorkerCommand,
         root: &Path,
         directory: Option<&cap_std::fs::Dir>,
+        spawner: Option<&SharedSpawner>,
     ) -> Result<Self, &'static str> {
-        let mut cmd = command(plan, root, directory).map_err(|_| "prepare_spawn_failed")?;
+        let mut cmd = command(plan, root, directory, spawner, None)
+            .map_err(|_| "prepare_spawn_failed")?;
         cmd.stdin(Stdio::null());
         let mut child = cmd
             .group()

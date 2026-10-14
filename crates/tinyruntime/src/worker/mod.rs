@@ -116,6 +116,7 @@ pub struct WorkerManager {
     book: Arc<Mutex<Book>>,
     root: PathBuf,
     cache_scopes: Arc<HashMap<String, PathBuf>>,
+    spawner: Option<crate::pool::SharedSpawner>,
 }
 
 impl WorkerManager {
@@ -125,6 +126,7 @@ impl WorkerManager {
         Self {
             root,
             cache_scopes: Arc::new(HashMap::new()),
+            spawner: None,
             book: Arc::new(Mutex::new(Book {
                 nonce: uuid::Uuid::new_v4().to_string(),
                 issued: 0,
@@ -132,6 +134,15 @@ impl WorkerManager {
                 slots: HashMap::new(),
             })),
         }
+    }
+
+    /// Start every worker and preparation command through the host's spawner.
+    ///
+    /// A refusal fails that spawn; there is no direct fallback.
+    #[must_use]
+    pub fn with_spawner(mut self, spawner: crate::pool::SharedSpawner) -> Self {
+        self.spawner = Some(spawner);
+        self
     }
 
     /// Approve explicit named persistent cache scopes without performing I/O.
@@ -268,6 +279,7 @@ impl WorkerManager {
                     plan,
                     root,
                     cached,
+                    self.spawner.clone(),
                     rx,
                     slot.stop.subscribe(),
                     slot.state.clone(),
