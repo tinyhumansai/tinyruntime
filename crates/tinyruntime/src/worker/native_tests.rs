@@ -241,7 +241,7 @@ struct Gate {
 }
 
 impl crate::pool::Spawner for Gate {
-    fn id(&self) -> &str {
+    fn id(&self) -> &'static str {
         "gate"
     }
 
