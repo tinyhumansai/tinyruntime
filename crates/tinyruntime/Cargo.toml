@@ -62,7 +62,7 @@ workspace = true
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 # Reap fixture descendants in the test process rather than leaving them to PID1.
-nix = { version = "0.27", features = ["process"] }
+nix = { version = "0.31", features = ["process"] }
 
 [target.'cfg(unix)'.dependencies]
 # Isolates the fd-pinned child cwd pre_exec boundary from this unsafe-free crate.
