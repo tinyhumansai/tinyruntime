@@ -92,7 +92,7 @@ hex = "0.4"
 tar = "0.4"
 flate2 = "1"
 xz2 = { version = "0.1", features = ["static"] }
-zip = { version = "8", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 # A cross-process lock around an install directory, so two hosts sharing a cache
 # root cannot extract over each other.
 fs2 = "0.4"
